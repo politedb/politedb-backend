@@ -15,6 +15,7 @@ export const env = {
   defaultProduct: (process.env.DEFAULT_PRODUCT ?? "politedb").trim(),
   databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/license-key.db"),
   polarAccessToken: (process.env.POLAR_ACCESS_TOKEN ?? "").trim(),
+  polarOrganizationId: (process.env.POLAR_ORGANIZATION_ID ?? "").trim(),
   polarWebhookSecret: (process.env.POLAR_WEBHOOK_SECRET ?? "").trim(),
   polarServer: (polarMode === "production" ? "production" : "sandbox") as "production" | "sandbox",
   polarSuccessUrl: (process.env.POLAR_SUCCESS_URL ?? "").trim() || null,

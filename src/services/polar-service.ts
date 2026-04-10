@@ -1,16 +1,14 @@
 import { z } from "zod";
 import { env } from "../config/env";
-import {
-  getPolarOrderEmailDelivery,
-  issueLicenseFromPolarOrder,
-  markPolarOrderLicenseEmailFailed,
-  markPolarOrderLicenseEmailSent,
-  revokeLicenseFromPolarOrder,
-  revokeLicenseFromPolarSubscription,
-} from "./license-service";
 import { getPolarClient } from "../libs/polar";
 import { normalizeHeaders } from "../utils/common";
 import { canSendLicenseEmails, sendLicenseIssuedEmail } from "./email-service";
+import {
+  getPolarLicenseKeyDelivery,
+  markPolarLicenseKeyEmailFailed,
+  markPolarLicenseKeyEmailSent,
+  upsertPolarLicenseKeyDelivery,
+} from "./polar-license-delivery";
 
 const polarWebhookModule = require("@polar-sh/sdk/webhooks") as {
   validateEvent: typeof import("@polar-sh/sdk/dist/commonjs/webhooks.js").validateEvent;
@@ -18,6 +16,10 @@ const polarWebhookModule = require("@polar-sh/sdk/webhooks") as {
 };
 
 const { validateEvent, WebhookVerificationError } = polarWebhookModule;
+
+type BenefitGrantLicenseKeysProperties = {
+  licenseKeyId?: string;
+};
 
 const checkoutSchema = z.object({
   productIds: z.array(z.string().min(1)).min(1).optional(),
@@ -54,6 +56,83 @@ function getSuccessUrl(requested?: string) {
   return successUrl;
 }
 
+async function fetchPolarLicenseKey(licenseKeyId: string) {
+  const polar = getPolarClient();
+  return polar.licenseKeys.get({ id: licenseKeyId });
+}
+
+async function maybeSendPolarLicenseKeyEmail(event: {
+  grantId: string;
+  orderId?: string | null;
+  benefitId?: string | null;
+  licenseKeyId?: string | null;
+  customerEmail?: string | null;
+  customerName?: string | null;
+}) {
+  if (!event.customerEmail) {
+    return {
+      status: "skipped" as const,
+      reason: "CUSTOMER_EMAIL_MISSING",
+    };
+  }
+
+  upsertPolarLicenseKeyDelivery({
+    grantId: event.grantId,
+    orderId: event.orderId,
+    benefitId: event.benefitId,
+    licenseKeyId: event.licenseKeyId,
+    customerEmail: event.customerEmail,
+  });
+
+  const delivery = getPolarLicenseKeyDelivery(event.grantId);
+  if (delivery?.email_sent_at) {
+    return {
+      status: "skipped" as const,
+      reason: "ALREADY_SENT",
+    };
+  }
+
+  if (!canSendLicenseEmails()) {
+    return {
+      status: "skipped" as const,
+      reason: "EMAIL_NOT_CONFIGURED",
+    };
+  }
+
+  if (!event.licenseKeyId) {
+    return {
+      status: "skipped" as const,
+      reason: "LICENSE_KEY_NOT_READY",
+    };
+  }
+
+  try {
+    const licenseKey = await fetchPolarLicenseKey(event.licenseKeyId);
+    await sendLicenseIssuedEmail({
+      to: event.customerEmail,
+      customerName: event.customerName,
+      product: licenseKey.benefitId,
+      planName: "Polar License Key",
+      licenseKey: licenseKey.key,
+      instanceName: null,
+      seatsAllowed: licenseKey.limitActivations ?? 1,
+      expiresAt: licenseKey.expiresAt?.toISOString() ?? null,
+    });
+    markPolarLicenseKeyEmailSent(event.grantId);
+    return {
+      status: "sent" as const,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "UNKNOWN_EMAIL_ERROR";
+    markPolarLicenseKeyEmailFailed(event.grantId, message);
+    console.error(`Failed to send Polar license key email for grant ${event.grantId}: ${message}`);
+    return {
+      status: "failed" as const,
+      reason: message,
+    };
+  }
+}
+
 export async function createPolarCheckout(payload: unknown) {
   const input = checkoutSchema.parse(payload);
   const polar = getPolarClient();
@@ -65,7 +144,6 @@ export async function createPolarCheckout(payload: unknown) {
     ...(typeof input.seatsAllowed === "number" ? { seatsAllowed: input.seatsAllowed } : {}),
     ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
   };
-
   const checkout = await polar.checkouts.create({
     products: getCheckoutProductIds(input.productIds),
     successUrl: getSuccessUrl(input.successUrl),
@@ -98,87 +176,71 @@ export async function handlePolarWebhook(
   const event = validateEvent(rawBody, normalizeHeaders(headers), env.polarWebhookSecret);
 
   switch (event.type) {
-    case "order.paid":
-      if (!event.data.customer.email) {
-        throw new Error("POLAR_CUSTOMER_EMAIL_MISSING");
+    case "benefit_grant.created": {
+      if (event.data.benefit.type !== "license_keys") {
+        return {
+          received: true,
+          eventType: event.type,
+          ignored: true,
+        };
       }
 
-      const result = issueLicenseFromPolarOrder({
-        orderId: event.data.id,
-        checkoutId: event.data.checkoutId,
-        subscriptionId: event.data.subscriptionId,
-        customerId: event.data.customerId,
-        productId: event.data.productId,
-        externalCustomerId: event.data.customer.externalId ?? null,
+      const properties = event.data.properties as BenefitGrantLicenseKeysProperties;
+
+      const licenseEmail = await maybeSendPolarLicenseKeyEmail({
+        grantId: event.data.id,
+        orderId: event.data.orderId,
+        benefitId: event.data.benefitId,
+        licenseKeyId: properties.licenseKeyId,
         customerEmail: event.data.customer.email,
         customerName: event.data.customer.name,
-        productName: event.data.product?.name ?? null,
-        seats: event.data.seats ?? event.data.subscription?.seats ?? null,
-        currentPeriodEnd: event.data.subscription?.currentPeriodEnd?.toISOString() ?? null,
-        metadata: event.data.metadata,
       });
-
-      const emailDelivery = getPolarOrderEmailDelivery(event.data.id);
-      let licenseEmail: { status: "sent" | "skipped" | "failed"; reason?: string } = {
-        status: "skipped",
-        reason: "ALREADY_SENT",
-      };
-
-      if (!emailDelivery.emailSentAt) {
-        if (!canSendLicenseEmails()) {
-          licenseEmail = {
-            status: "skipped",
-            reason: "EMAIL_NOT_CONFIGURED",
-          };
-        } else {
-          try {
-            await sendLicenseIssuedEmail({
-              to: emailDelivery.customerEmail,
-              customerName: event.data.customer.name,
-              product: emailDelivery.product,
-              planName: emailDelivery.planName,
-              licenseKey: emailDelivery.licenseKey,
-              instanceName: emailDelivery.instanceName,
-              seatsAllowed: emailDelivery.seatsAllowed,
-              expiresAt: emailDelivery.expiresAt,
-            });
-            markPolarOrderLicenseEmailSent(event.data.id);
-            licenseEmail = {
-              status: "sent",
-            };
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "UNKNOWN_EMAIL_ERROR";
-            markPolarOrderLicenseEmailFailed(event.data.id, message);
-            console.error(
-              `Failed to send license email for Polar order ${event.data.id}: ${message}`,
-            );
-            licenseEmail = {
-              status: "failed",
-              reason: message,
-            };
-          }
-        }
-      }
 
       return {
         received: true,
         eventType: event.type,
-        result,
+        result: {
+          grantId: event.data.id,
+          benefitId: event.data.benefitId,
+          orderId: event.data.orderId,
+          customerId: event.data.customerId,
+          source: "polar",
+        },
         licenseEmail,
+      };
+    }
+
+    case "order.paid":
+      return {
+        received: true,
+        eventType: event.type,
+        result: {
+          orderId: event.data.id,
+          status: "received",
+          source: "polar",
+        },
       };
 
     case "order.refunded":
       return {
         received: true,
         eventType: event.type,
-        result: revokeLicenseFromPolarOrder(event.data.id),
+        result: {
+          orderId: event.data.id,
+          status: "received",
+          source: "polar",
+        },
       };
 
     case "subscription.revoked":
       return {
         received: true,
         eventType: event.type,
-        result: revokeLicenseFromPolarSubscription(event.data.id),
+        result: {
+          subscriptionId: event.data.id,
+          status: "received",
+          source: "polar",
+        },
       };
 
     default:

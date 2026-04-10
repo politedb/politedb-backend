@@ -69,6 +69,21 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_polar_transactions_license
   ON polar_transactions (license_id);
+
+  CREATE TABLE IF NOT EXISTS polar_license_key_deliveries (
+    grant_id TEXT PRIMARY KEY,
+    polar_order_id TEXT,
+    polar_benefit_id TEXT,
+    polar_license_key_id TEXT,
+    customer_email TEXT NOT NULL,
+    email_sent_at INTEGER,
+    email_error TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_polar_license_key_deliveries_order
+  ON polar_license_key_deliveries (polar_order_id);
 `);
 
 const polarTransactionColumns = db

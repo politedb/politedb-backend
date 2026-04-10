@@ -1,6 +1,6 @@
 # PoliteDB Backend
 
-`PoliteDB Backend` is an Express + TypeScript backend for managing product licenses and device activations. It provides APIs to create licenses, activate them on specific devices, validate activation tokens, deactivate devices, and revoke licenses.
+`PoliteDB Backend` is an Express + TypeScript backend for Polar-powered license key checkout, activation, validation, and delivery.
 
 ## Tech Stack
 
@@ -12,12 +12,12 @@
 
 ## Features
 
-- Create and manage license keys
+- Create Polar checkout sessions
 - Activate a license for a specific device
 - Validate activation tokens
 - Deactivate a device from a license
-- Revoke a license and invalidate all active devices
-- Store data locally in SQLite
+- Deliver Polar license keys by email
+- Store webhook delivery state locally in SQLite
 
 ## Getting Started
 
@@ -61,6 +61,7 @@ By default, the server runs at `http://localhost:4000`.
 - `DATABASE_PATH`: path to the SQLite database file
 - `DEFAULT_PRODUCT`: default product name used when creating licenses
 - `POLAR_ACCESS_TOKEN`: Polar organization access token
+- `POLAR_ORGANIZATION_ID`: Polar organization ID used for license key activation and validation
 - `POLAR_WEBHOOK_SECRET`: webhook secret from the Polar dashboard
 - `POLAR_SERVER`: `sandbox` or `production`
 - `POLAR_PRODUCT_IDS`: comma-separated Polar product IDs used by checkout when the request does not provide `productIds`
@@ -105,6 +106,8 @@ Returns the current service status.
 
 #### Create a license
 
+This route is part of the legacy local license flow and is not used when running fully on Polar License Keys.
+
 `POST /v1/admin/licenses`
 
 Headers:
@@ -130,13 +133,13 @@ Request body:
 
 `GET /v1/admin/licenses`
 
-Returns all licenses and their current device usage.
+Returns locally stored licenses from the legacy flow.
 
 #### Revoke a license
 
 `POST /v1/admin/licenses/:licenseId/revoke`
 
-Revokes the license and deactivates all active devices linked to it.
+Revokes a locally stored license from the legacy flow.
 
 ### Client Endpoints
 
@@ -164,6 +167,7 @@ Revokes the license and deactivates all active devices linked to it.
 ```json
 {
   "product": "politedb",
+  "licenseKey": "POLI-1234-5678-9ABC-DEF0",
   "activationToken": "<token>",
   "device": {
     "device_id": "device-001",
@@ -181,6 +185,7 @@ Revokes the license and deactivates all active devices linked to it.
 ```json
 {
   "product": "politedb",
+  "licenseKey": "POLI-1234-5678-9ABC-DEF0",
   "activationToken": "<token>",
   "device": {
     "device_id": "device-001",
@@ -214,14 +219,12 @@ This endpoint creates a Polar checkout session and returns the hosted checkout U
 
 `POST /polar/webhooks`
 
-Polar sends billing events to this endpoint. The backend validates the webhook signature and then:
+Polar sends billing events to this endpoint. In the Polar License Keys flow, the backend validates the webhook signature and then:
 
-- creates or updates a local license when `order.paid` is received
-- sends the issued license key to the buyer by email when SMTP is configured
-- revokes a local license when `order.refunded` is received
-- revokes a local license when `subscription.revoked` is received
+- acknowledges `order.paid`, `order.refunded`, and `subscription.revoked`
+- sends the issued Polar license key by email when `benefit_grant.created` is received for a `license_keys` benefit
 
-License emails are sent at most once per Polar order. If Polar retries the same webhook, the backend will not resend an already delivered email.
+License emails are sent at most once per Polar benefit grant. If Polar retries the same webhook, the backend will not resend an already delivered email.
 
 ## Suggested Frontend Configuration
 
@@ -246,4 +249,4 @@ VITE_LICENSE_PRODUCT=politedb
 - The database file is stored locally using SQLite.
 - Admin endpoints are protected with the `x-api-key` header.
 - The service is designed to match the current `politedb` license flow.
-- Polar checkout metadata is copied into local license fields so you can keep using the existing activation API.
+- To run fully on Polar License Keys, your organization access token should include `checkouts:write`, `license_keys:read`, and `license_keys:write`.
