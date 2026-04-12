@@ -65,6 +65,8 @@ async function maybeSendPolarLicenseKeyEmail(event: {
   grantId: string;
   orderId?: string | null;
   benefitId?: string | null;
+  productName?: string | null;
+  planName?: string | null;
   licenseKeyId?: string | null;
   customerEmail?: string | null;
   customerName?: string | null;
@@ -111,8 +113,8 @@ async function maybeSendPolarLicenseKeyEmail(event: {
     await sendLicenseIssuedEmail({
       to: event.customerEmail,
       customerName: event.customerName,
-      product: licenseKey.benefitId,
-      planName: "Polar License Key",
+      product: event.productName?.trim() || env.defaultProduct,
+      planName: event.planName?.trim() || "Polar License",
       licenseKey: licenseKey.key,
       instanceName: null,
       seatsAllowed: licenseKey.limitActivations ?? 1,
@@ -191,6 +193,8 @@ export async function handlePolarWebhook(
         grantId: event.data.id,
         orderId: event.data.orderId,
         benefitId: event.data.benefitId,
+        productName: "PoliteDB",
+        planName: event.data.benefit.description.replace("License Key", ""),
         licenseKeyId: properties.licenseKeyId,
         customerEmail: event.data.customer.email,
         customerName: event.data.customer.name,

@@ -51,7 +51,14 @@ function formatExpiry(expiresAt?: string | null) {
     return expiresAt;
   }
 
-  return date.toISOString();
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hours = String(date.getUTCHours()).padStart(2, "0");
+  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(date.getUTCSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day}, ${hours}:${minutes}:${seconds} GMT+0`;
 }
 
 export function canSendLicenseEmails() {
@@ -62,16 +69,16 @@ export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
   const client = getTransporter();
   const greetingName = input.customerName?.trim() || input.instanceName?.trim() || "there";
   const expiryLabel = formatExpiry(input.expiresAt);
-  const subject = `Welcome to ${input.product} ${input.planName}`;
+  const subject = `Welcome to ${input.product} - ${input.planName} plan`;
   const text = [
     `Hi ${greetingName},`,
     "",
     "Your purchase was successful. Here's your license information:",
     "",
-    `Plan: ${input.planName}`,
-    `License key: ${input.licenseKey}`,
-    `Seats: ${input.seatsAllowed}`,
-    `Expires at: ${expiryLabel}`,
+    `🔐 License key: ${input.licenseKey}`,
+    `📦 Plan: ${input.planName}`,
+    `👥 Seats: ${input.seatsAllowed}`,
+    `🗓️ Expires at: ${expiryLabel}`,
     "",
     "Keep this key somewhere safe. You can use it to activate your product.",
     "",
@@ -103,29 +110,28 @@ export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
   const html = [
     `<p>Hi ${greetingName},</p>`,
     "<p>Your purchase was successful. Here's your license key:</p>",
-    `<p style="font-size:20px;"><strong>🔐 ${input.licenseKey}</strong></p>`,
-    "<ul>",
-    `<li><strong>Plan:</strong> ${input.planName}</li>`,
-    `<li><strong>License key:</strong> <code>${input.licenseKey}</code></li>`,
-    `<li><strong>Seats:</strong> ${input.seatsAllowed}</li>`,
-    `<li><strong>Expires at:</strong> ${expiryLabel}</li>`,
-    "</ul>",
+    "<div>",
+    `<p><strong>🔐 License key:</strong> <code>${input.licenseKey}</code></p>`,
+    `<p><strong>📦 Plan:</strong> ${input.planName}</p>`,
+    `<p><strong>👥 Seats:</strong> ${input.seatsAllowed}</p>`,
+    `<p><strong>🗓️ Expires at:</strong> ${expiryLabel}</p>`,
+    "</div>",
     "<p>Keep this key somewhere safe. You can use it to activate your product.</p>",
     "<hr>",
     "<h3>Get started</h3>",
-    "<ul>",
-    "<li>Open the app</li>",
-    "<li>Navigate to Settings &rarr; License key</li>",
-    "<li>Enter your key and activate</li>",
-    "</ul>",
+    "<div>",
+    "<p>- Open the app</p>",
+    "<p>- Navigate to Settings &rarr; License key</p>",
+    "<p>- Enter your key and activate</p>",
+    "</div>",
     "<hr>",
     "<h3>What you just unlocked</h3>",
-    "<ul>",
-    "<li>&#10003; Unlimited connections</li>",
-    "<li>&#10003; Advanced query tools</li>",
-    "<li>&#10003; Priority updates</li>",
-    "<li>&#10003; Unlock all features</li>",
-    "</ul>",
+    "<div>",
+    "<p>&#10003; Unlimited connections</p>",
+    "<p>&#10003; Advanced query tools</p>",
+    "<p>&#10003; Priority updates</p>",
+    "<p>&#10003; Unlock all features</p>",
+    "</div>",
     "<hr>",
     "<p>Need help? Our team is here for you anytime.</p>",
     `<p>Best,<br>The ${input.product} Team</p>`,
