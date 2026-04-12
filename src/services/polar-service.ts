@@ -76,7 +76,7 @@ async function maybeSendPolarLicenseKeyEmail(event: {
     };
   }
 
-  upsertPolarLicenseKeyDelivery({
+  await upsertPolarLicenseKeyDelivery({
     grantId: event.grantId,
     orderId: event.orderId,
     benefitId: event.benefitId,
@@ -84,8 +84,8 @@ async function maybeSendPolarLicenseKeyEmail(event: {
     customerEmail: event.customerEmail,
   });
 
-  const delivery = getPolarLicenseKeyDelivery(event.grantId);
-  if (delivery?.email_sent_at) {
+  const delivery = await getPolarLicenseKeyDelivery(event.grantId);
+  if (delivery?.emailSentAt) {
     return {
       status: "skipped" as const,
       reason: "ALREADY_SENT",
@@ -118,13 +118,13 @@ async function maybeSendPolarLicenseKeyEmail(event: {
       seatsAllowed: licenseKey.limitActivations ?? 1,
       expiresAt: licenseKey.expiresAt?.toISOString() ?? null,
     });
-    markPolarLicenseKeyEmailSent(event.grantId);
+    await markPolarLicenseKeyEmailSent(event.grantId);
     return {
       status: "sent" as const,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "UNKNOWN_EMAIL_ERROR";
-    markPolarLicenseKeyEmailFailed(event.grantId, message);
+    await markPolarLicenseKeyEmailFailed(event.grantId, message);
     console.error(`Failed to send Polar license key email for grant ${event.grantId}: ${message}`);
     return {
       status: "failed" as const,

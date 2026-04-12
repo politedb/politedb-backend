@@ -1,13 +1,13 @@
 # PoliteDB Backend
 
-`PoliteDB Backend` is an Express + TypeScript backend for Polar-powered license key checkout, activation, validation, and delivery.
+`PoliteDB Backend` is an Express + TypeScript backend for Polar-powered license key checkout, activation, validation, and delivery backed by PostgreSQL 16 via MikroORM.
 
 ## Tech Stack
 
 - Express 5
 - TypeScript
-- SQLite
-- `better-sqlite3`
+- PostgreSQL 16
+- MikroORM
 - Zod
 
 ## Features
@@ -17,7 +17,7 @@
 - Validate activation tokens
 - Deactivate a device from a license
 - Deliver Polar license keys by email
-- Store webhook delivery state locally in SQLite
+- Store legacy admin license records and webhook delivery state in PostgreSQL
 
 ## Getting Started
 
@@ -33,16 +33,15 @@ npm install
 cp .env.example .env
 ```
 
-For local email testing, the default SMTP values in `.env.example` are set up for Mailpit.
+For local development, `.env.example` is set up for PostgreSQL on `localhost:5432` and Mailpit on `localhost:1025`.
 
-Start Mailpit with Docker Compose:
+Start PostgreSQL and Mailpit with Docker Compose:
 
 ```bash
 docker compose up -d
 ```
 
-Mailpit services:
-
+- PostgreSQL: `localhost:5432`
 - SMTP server: `localhost:1025`
 - Web UI: `http://localhost:8025`
 
@@ -58,7 +57,7 @@ By default, the server runs at `http://localhost:4000`.
 
 - `PORT`: server port
 - `LICENSE_API_KEY`: API key required for admin endpoints
-- `DATABASE_PATH`: path to the SQLite database file
+- `DATABASE_URL`: PostgreSQL connection string used by MikroORM
 - `DEFAULT_PRODUCT`: default product name used when creating licenses
 - `POLAR_ACCESS_TOKEN`: Polar organization access token
 - `POLAR_ORGANIZATION_ID`: Polar organization ID used for license key activation and validation
@@ -240,13 +239,13 @@ VITE_LICENSE_PRODUCT=politedb
 - `src/server.ts`: server entry point
 - `src/app.ts`: Express app configuration and error handling
 - `src/routes`: HTTP route definitions
-- `src/services/license-service.ts`: license business logic
-- `src/db/database.ts`: SQLite setup and schema initialization
+- `src/services/license-service.ts`: legacy admin license persistence
+- `src/db/orm.ts`: MikroORM bootstrap
+- `src/db/entities.ts`: MikroORM entity schemas
 - `src/utils/licenseKey.ts`: license key and token generation helpers
 
 ## Notes
 
-- The database file is stored locally using SQLite.
 - Admin endpoints are protected with the `x-api-key` header.
 - The service is designed to match the current `politedb` license flow.
 - To run fully on Polar License Keys, your organization access token should include `checkouts:write`, `license_keys:read`, and `license_keys:write`.

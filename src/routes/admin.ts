@@ -14,26 +14,26 @@ adminRouter.use((req, res, next) => {
   next();
 });
 
-adminRouter.post("/licenses", (req, res, next) => {
+adminRouter.post("/licenses", async (req, res, next) => {
   try {
-    const created = createLicense(req.body);
+    const created = await createLicense(req.body);
     res.status(201).json(created);
   } catch (error) {
     next(error);
   }
 });
 
-adminRouter.get("/licenses", (_req, res, next) => {
+adminRouter.get("/licenses", async (_req, res, next) => {
   try {
-    res.json({ items: listLicenses() });
+    res.json({ items: await listLicenses() });
   } catch (error) {
     next(error);
   }
 });
 
-adminRouter.post("/licenses/:licenseId/revoke", (req, res, next) => {
+adminRouter.post("/licenses/:licenseId/revoke", async (req, res, next) => {
   try {
-    res.json(revokeLicense(req.params.licenseId));
+    res.json(await revokeLicense(req.params.licenseId));
   } catch (error) {
     next(error);
   }

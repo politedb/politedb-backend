@@ -14,6 +14,7 @@ export const env = {
   adminApiKey: (process.env.LICENSE_API_KEY ?? "change-me").trim(),
   defaultProduct: (process.env.DEFAULT_PRODUCT ?? "politedb").trim(),
   databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/license-key.db"),
+  databaseUrl: (process.env.DATABASE_URL ?? "").trim(),
   polarAccessToken: (process.env.POLAR_ACCESS_TOKEN ?? "").trim(),
   polarOrganizationId: (process.env.POLAR_ORGANIZATION_ID ?? "").trim(),
   polarWebhookSecret: (process.env.POLAR_WEBHOOK_SECRET ?? "").trim(),
