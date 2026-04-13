@@ -19,7 +19,7 @@ export async function initOrm() {
       clientUrl: getClientUrl(),
     });
 
-    await orm.schema.update();
+    await orm.getSchemaGenerator().updateSchema();
   }
 
   return orm;
