@@ -14,8 +14,6 @@ jobs:
       SSH_HOST: ${{ secrets.VPS_HOST }}
       SSH_PORT: ${{ secrets.VPS_PORT }}
       SSH_USER: ${{ secrets.VPS_USER }}
-      SYSTEMD_SERVICE: ${{ secrets.VPS_SYSTEMD_SERVICE }}
-      PM2_APP_NAME: ${{ secrets.VPS_PM2_APP_NAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +47,7 @@ jobs:
           cp package.json release/package.json
           cp package-lock.json release/package-lock.json
           cp -R scripts release/scripts
+          cp ecosystem.config.cjs release/ecosystem.config.cjs
           tar \
             -czf release.tar.gz \
             -C release .
@@ -72,9 +71,8 @@ jobs:
             mkdir -p '${APP_DIR}'
             rm -rf '${APP_DIR}/dist' '${APP_DIR}/scripts' '${APP_DIR}/node_modules'
             tar -xzf /tmp/politedb-backend-release.tar.gz -C '${APP_DIR}'
-            rm -f /tmp/politedb-backend-release.tar.gz
             mv /tmp/politedb-backend.env '${APP_DIR}/.env'
             chmod 600 '${APP_DIR}/.env'
             chmod +x '${APP_DIR}/scripts/deploy-vps.sh'
-            APP_DIR='${APP_DIR}' SYSTEMD_SERVICE='${SYSTEMD_SERVICE}' PM2_APP_NAME='${PM2_APP_NAME}' bash '${APP_DIR}/scripts/deploy-vps.sh'
+            APP_DIR='${APP_DIR}' PM2_ECOSYSTEM_FILE='${PM2_ECOSYSTEM_FILE:-ecosystem.config.cjs}' bash '${APP_DIR}/scripts/deploy-vps.sh'
           "
