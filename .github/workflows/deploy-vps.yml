@@ -68,11 +68,14 @@ jobs:
         run: |
           ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "
             set -euo pipefail
-            mkdir -p '${APP_DIR}'
-            rm -rf '${APP_DIR}/dist' '${APP_DIR}/scripts' '${APP_DIR}/node_modules'
-            tar -xzf /tmp/politedb-backend-release.tar.gz -C '${APP_DIR}'
-            mv /tmp/politedb-backend.env '${APP_DIR}/.env'
-            chmod 600 '${APP_DIR}/.env'
-            chmod +x '${APP_DIR}/scripts/deploy-vps.sh'
-            APP_DIR='${APP_DIR}' PM2_ECOSYSTEM_FILE='${PM2_ECOSYSTEM_FILE:-ecosystem.config.cjs}' bash '${APP_DIR}/scripts/deploy-vps.sh'
+            APP_DIR='${APP_DIR}'
+            APP_DIR=\"\${APP_DIR/#\~/\$HOME}\"
+            mkdir -p \"\${APP_DIR}\"
+            rm -rf \"\${APP_DIR}/dist\" \"\${APP_DIR}/scripts\" \"\${APP_DIR}/node_modules\"
+            tar -xzf /tmp/politedb-backend-release.tar.gz -C \"\${APP_DIR}\"
+            mv /tmp/politedb-backend.env \"\${APP_DIR}/.env\"
+            rm -f /tmp/politedb-backend-release.tar.gz /tmp/politedb-backend.env
+            chmod 600 \"\${APP_DIR}/.env\"
+            chmod +x \"\${APP_DIR}/scripts/deploy-vps.sh\"
+            APP_DIR=\"\${APP_DIR}\" PM2_ECOSYSTEM_FILE='${PM2_ECOSYSTEM_FILE:-ecosystem.config.cjs}' bash \"\${APP_DIR}/scripts/deploy-vps.sh\"
           "
