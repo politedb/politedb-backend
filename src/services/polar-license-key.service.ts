@@ -1,9 +1,9 @@
-import { z } from "zod";
-import { env } from "../config/env";
-import { Activation, License } from "../db/entities";
-import { getEm } from "../db/orm";
-import { getPolarClient } from "../libs/polar";
-import { createId } from "../utils/license-key";
+import { z } from 'zod';
+import { env } from '../config/env';
+import { Activation, License } from '../db/entities';
+import { getEm } from '../db/orm';
+import { getPolarClient } from '../libs/polar';
+import { createId } from '../utils/license-key';
 
 const deviceSchema = z.object({
   device_id: z.string().min(1),
@@ -33,19 +33,19 @@ const deactivateSchema = z
     device: deviceSchema.optional(),
   })
   .refine((value) => value.activationToken || value.licenseKey, {
-    message: "activationToken or licenseKey is required",
-    path: ["activationToken"],
+    message: 'activationToken or licenseKey is required',
+    path: ['activationToken'],
   });
 
 type DeviceInput = z.infer<typeof deviceSchema>;
 type ActivateInput = z.infer<typeof activateSchema>;
 type ActivationResult = Awaited<
-  ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["activate"]>
+  ReturnType<ReturnType<typeof getPolarClient>['licenseKeys']['activate']>
 >;
 
 function getOrganizationId() {
   if (!env.polarOrganizationId) {
-    throw new Error("POLAR_ORGANIZATION_ID is required");
+    throw new Error('POLAR_ORGANIZATION_ID is required');
   }
 
   return env.polarOrganizationId;
@@ -76,11 +76,11 @@ function mapActivationResponse(
   product: string,
   licenseKey: string,
   planName: string,
-  activation: Awaited<ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["activate"]>>,
+  activation: Awaited<ReturnType<ReturnType<typeof getPolarClient>['licenseKeys']['activate']>>,
   devicesUsed: number,
 ) {
   return {
-    status: "active",
+    status: 'active',
     licenseId: activation.licenseKey.id,
     licenseKey,
     activationToken: activation.id,
@@ -93,8 +93,8 @@ function mapActivationResponse(
     seatsAllowed: activation.licenseKey.limitActivations ?? null,
     devicesUsed,
     product,
-    message: "License activated",
-    source: "polar",
+    message: 'License activated',
+    source: 'polar',
   };
 }
 
@@ -102,11 +102,11 @@ function mapValidatedResponse(
   product: string,
   licenseKey: string,
   planName: string,
-  validated: Awaited<ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["validate"]>>,
+  validated: Awaited<ReturnType<ReturnType<typeof getPolarClient>['licenseKeys']['validate']>>,
   devicesUsed: number | null,
 ) {
   return {
-    status: validated.activation ? "active" : "inactive",
+    status: validated.activation ? 'active' : 'inactive',
     licenseId: validated.id,
     licenseKey,
     activationToken: validated.activation?.id ?? null,
@@ -119,8 +119,8 @@ function mapValidatedResponse(
     seatsAllowed: validated.limitActivations,
     devicesUsed,
     product,
-    message: "License valid",
-    source: "polar",
+    message: 'License valid',
+    source: 'polar',
   };
 }
 
@@ -131,7 +131,7 @@ async function countActiveDevicesForLicenseKey(licenseKey: string) {
     return null;
   }
 
-  return em.count(Activation, { license: license.id, status: "active" });
+  return em.count(Activation, { license: license.id, status: 'active' });
 }
 
 async function resolveLicenseKeyForDeactivation(activationToken?: string, licenseKey?: string) {
@@ -140,11 +140,11 @@ async function resolveLicenseKeyForDeactivation(activationToken?: string, licens
   }
 
   if (!activationToken) {
-    throw new Error("ACTIVATION_NOT_FOUND");
+    throw new Error('ACTIVATION_NOT_FOUND');
   }
 
   if (!licenseKey) {
-    throw new Error("LICENSE_KEY_REQUIRED");
+    throw new Error('LICENSE_KEY_REQUIRED');
   }
 
   return licenseKey;
@@ -166,15 +166,15 @@ async function assertActivationCapacity(
     const sameDeviceActive = await em.findOne(Activation, {
       license: license.id,
       deviceId: input.device.device_id,
-      status: "active",
+      status: 'active',
     });
     if (sameDeviceActive) {
-      throw new Error("DEVICE_ALREADY_ACTIVATED");
+      throw new Error('DEVICE_ALREADY_ACTIVATED');
     }
   }
 
   const activeInDb = license
-    ? await em.count(Activation, { license: license.id, status: "active" })
+    ? await em.count(Activation, { license: license.id, status: 'active' })
     : 0;
 
   const validated = await polar.licenseKeys.validate({
@@ -186,7 +186,7 @@ async function assertActivationCapacity(
   const seatsLimit = validated.limitActivations ?? 0;
 
   if (seatsLimit > 0 && activeInDb >= seatsLimit) {
-    throw new Error("LICENSE_ACTIVATION_LIMIT_REACHED");
+    throw new Error('LICENSE_ACTIVATION_LIMIT_REACHED');
   }
 }
 
@@ -201,7 +201,7 @@ async function activateOnPolar(input: ActivateInput, polar: ReturnType<typeof ge
 }
 
 function getPlanNameFromBenefitDescription(description: string) {
-  return description.replace("License Key", "").trim();
+  return description.replace('License Key', '').trim();
 }
 
 async function upsertLicenseFromActivation(input: {
@@ -225,7 +225,7 @@ async function upsertLicenseFromActivation(input: {
       instanceName: null,
       seatsAllowed: seatsFromPolar,
       expiresAt: input.activation.licenseKey.expiresAt,
-      status: "active",
+      status: 'active',
       notes: null,
       createdAt: now,
       updatedAt: now,
@@ -261,7 +261,7 @@ async function upsertDeviceActivation(input: {
     activation.deviceName = input.device.device_name;
     activation.platform = input.device.platform;
     activation.arch = input.device.arch;
-    activation.status = "active";
+    activation.status = 'active';
     activation.activatedAt = now;
     activation.lastValidatedAt = now;
     activation.deactivatedAt = null;
@@ -274,7 +274,7 @@ async function upsertDeviceActivation(input: {
       deviceName: input.device.device_name,
       platform: input.device.platform,
       arch: input.device.arch,
-      status: "active",
+      status: 'active',
       activatedAt: now,
       lastValidatedAt: now,
       deactivatedAt: null,
@@ -286,7 +286,7 @@ async function upsertDeviceActivation(input: {
 }
 
 async function countActiveDevices(licenseId: string) {
-  return getEm().count(Activation, { license: licenseId, status: "active" });
+  return getEm().count(Activation, { license: licenseId, status: 'active' });
 }
 
 async function markActivationDeactivatedByToken(activationToken: string) {
@@ -297,7 +297,7 @@ async function markActivationDeactivatedByToken(activationToken: string) {
   }
 
   const now = new Date();
-  stored.status = "inactive";
+  stored.status = 'inactive';
   stored.deactivatedAt = now;
   stored.lastValidatedAt = now;
   await em.flush();
@@ -345,7 +345,7 @@ export async function validatePolarLicenseKey(payload: unknown) {
   return mapValidatedResponse(
     input.product,
     input.licenseKey,
-    license?.planName ?? "Polar License",
+    license?.planName ?? 'Polar License',
     validated,
     devicesUsed,
   );
@@ -359,7 +359,7 @@ export async function deactivatePolarLicenseKey(payload: unknown) {
   );
 
   if (!input.activationToken) {
-    throw new Error("ACTIVATION_NOT_FOUND");
+    throw new Error('ACTIVATION_NOT_FOUND');
   }
 
   const polar = getPolarClient();
@@ -372,11 +372,11 @@ export async function deactivatePolarLicenseKey(payload: unknown) {
   await markActivationDeactivatedByToken(input.activationToken);
 
   return {
-    status: "inactive",
+    status: 'inactive',
     licenseKey,
     activationToken: input.activationToken,
     product: input.product,
-    message: "License deactivated",
-    source: "polar",
+    message: 'License deactivated',
+    source: 'polar',
   };
 }

@@ -1,12 +1,12 @@
-import { MikroORM } from "@mikro-orm/postgresql";
-import { env } from "../config/env";
-import { entities } from "./entities";
+import { MikroORM } from '@mikro-orm/postgresql';
+import { env } from '../config/env';
+import { entities } from './entities';
 
 let orm: any = null;
 
 function getClientUrl() {
   if (!env.databaseUrl) {
-    throw new Error("DATABASE_URL is required");
+    throw new Error('DATABASE_URL is required');
   }
 
   return env.databaseUrl;
@@ -19,6 +19,7 @@ export async function initOrm() {
       clientUrl: getClientUrl(),
     });
 
+    await orm.em.getConnection().execute('CREATE EXTENSION IF NOT EXISTS vector');
     await orm.getSchemaGenerator().updateSchema();
   }
 
@@ -27,7 +28,7 @@ export async function initOrm() {
 
 export function getOrm() {
   if (!orm) {
-    throw new Error("ORM_NOT_INITIALIZED");
+    throw new Error('ORM_NOT_INITIALIZED');
   }
 
   return orm;

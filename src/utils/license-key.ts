@@ -1,10 +1,10 @@
-import crypto from "node:crypto";
+import crypto from 'node:crypto';
 
 function randomBlock(size = 4) {
-  return crypto.randomBytes(size).toString("hex").toUpperCase();
+  return crypto.randomBytes(size).toString('hex').toUpperCase();
 }
 
-export function createLicenseKey(prefix = "PLD") {
+export function createLicenseKey(prefix = 'PLD') {
   return `${prefix}-${randomBlock(4)}-${randomBlock(2)}-${randomBlock(2)}-${randomBlock(2)}-${randomBlock(6)}`;
 }
 
@@ -13,5 +13,5 @@ export function createId() {
 }
 
 export function createActivationToken() {
-  return crypto.randomBytes(32).toString("hex");
+  return crypto.randomBytes(32).toString('hex');
 }

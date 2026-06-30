@@ -1,5 +1,5 @@
-import nodemailer from "nodemailer";
-import { env } from "../config/env";
+import nodemailer from 'nodemailer';
+import { env } from '../config/env';
 
 type LicenseEmailInput = {
   to: string;
@@ -20,7 +20,7 @@ function isEmailConfigured() {
 
 function getTransporter() {
   if (!isEmailConfigured()) {
-    throw new Error("EMAIL_NOT_CONFIGURED");
+    throw new Error('EMAIL_NOT_CONFIGURED');
   }
 
   if (!transporter) {
@@ -43,7 +43,7 @@ function getTransporter() {
 
 function formatExpiry(expiresAt?: string | null) {
   if (!expiresAt) {
-    return "No expiration date";
+    return 'No expiration date';
   }
 
   const date = new Date(expiresAt);
@@ -52,11 +52,11 @@ function formatExpiry(expiresAt?: string | null) {
   }
 
   const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const hours = String(date.getUTCHours()).padStart(2, "0");
-  const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-  const seconds = String(date.getUTCSeconds()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
 
   return `${year}-${month}-${day}, ${hours}:${minutes}:${seconds} GMT+0`;
 }
@@ -67,75 +67,75 @@ export function canSendLicenseEmails() {
 
 export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
   const client = getTransporter();
-  const greetingName = input.customerName?.trim() || input.instanceName?.trim() || "there";
+  const greetingName = input.customerName?.trim() || input.instanceName?.trim() || 'there';
   const expiryLabel = formatExpiry(input.expiresAt);
   const subject = `Welcome to ${input.product} - ${input.planName} plan`;
   const text = [
     `Hi ${greetingName},`,
-    "",
+    '',
     "Your purchase was successful. Here's your license information:",
-    "",
+    '',
     `🔐 License key: ${input.licenseKey}`,
     `📦 Plan: ${input.planName}`,
     `👥 Seats: ${input.seatsAllowed}`,
     `🗓️ Expires at: ${expiryLabel}`,
-    "",
-    "Keep this key somewhere safe. You can use it to activate your product.",
-    "",
-    "---",
-    "",
-    "Get started",
-    "",
-    "- Open the app",
-    "- Navigate to Settings → License key",
-    "- Enter your key and activate",
-    "",
-    "---",
-    "",
-    "What you just unlocked",
-    "",
-    "✓ Unlimited connections",
-    "✓ Advanced query tools",
-    "✓ Priority updates",
-    "✓ Unlock all features",
-    "",
-    "---",
-    "",
-    "Need help? Our team is here for you anytime.",
-    "",
-    "Best,",
+    '',
+    'Keep this key somewhere safe. You can use it to activate your product.',
+    '',
+    '---',
+    '',
+    'Get started',
+    '',
+    '- Open the app',
+    '- Navigate to Settings → License key',
+    '- Enter your key and activate',
+    '',
+    '---',
+    '',
+    'What you just unlocked',
+    '',
+    '✓ Unlimited connections',
+    '✓ Advanced query tools',
+    '✓ Priority updates',
+    '✓ Unlock all features',
+    '',
+    '---',
+    '',
+    'Need help? Our team is here for you anytime.',
+    '',
+    'Best,',
     `The ${input.product} Team`,
-  ].join("\n");
+  ].join('\n');
 
   const html = [
     `<p>Hi ${greetingName},</p>`,
     "<p>Your purchase was successful. Here's your license key:</p>",
-    "<div>",
+    '<div>',
     `<p><strong>🔐 License key:</strong> <code>${input.licenseKey}</code></p>`,
     `<p><strong>📦 Plan:</strong> ${input.planName}</p>`,
     `<p><strong>👥 Seats:</strong> ${input.seatsAllowed}</p>`,
     `<p><strong>🗓️ Expires at:</strong> ${expiryLabel}</p>`,
-    "</div>",
-    "<p>Keep this key somewhere safe. You can use it to activate your product.</p>",
-    "<hr>",
-    "<h3>Get started</h3>",
-    "<div>",
-    "<p>- Open the app</p>",
-    "<p>- Navigate to Settings &rarr; License key</p>",
-    "<p>- Enter your key and activate</p>",
-    "</div>",
-    "<hr>",
-    "<h3>What you just unlocked</h3>",
-    "<div>",
-    "<p>&#10003; Unlimited connections</p>",
-    "<p>&#10003; Advanced query tools</p>",
-    "<p>&#10003; Priority updates</p>",
-    "<p>&#10003; Unlock all features</p>",
-    "</div>",
-    "<hr>",
-    "<p>Need help? Our team is here for you anytime.</p>",
+    '</div>',
+    '<p>Keep this key somewhere safe. You can use it to activate your product.</p>',
+    '<hr>',
+    '<h3>Get started</h3>',
+    '<div>',
+    '<p>- Open the app</p>',
+    '<p>- Navigate to Settings &rarr; License key</p>',
+    '<p>- Enter your key and activate</p>',
+    '</div>',
+    '<hr>',
+    '<h3>What you just unlocked</h3>',
+    '<div>',
+    '<p>&#10003; Unlimited connections</p>',
+    '<p>&#10003; Advanced query tools</p>',
+    '<p>&#10003; Priority updates</p>',
+    '<p>&#10003; Unlock all features</p>',
+    '</div>',
+    '<hr>',
+    '<p>Need help? Our team is here for you anytime.</p>',
     `<p>Best,<br>The ${input.product} Team</p>`,
-  ].join("");
+  ].join('');
 
   await client.sendMail({
     from: env.smtpFrom!,

@@ -1,6 +1,6 @@
-import { app } from "./app";
-import { env } from "./config/env";
-import { initOrm } from "./db/orm";
+import { app } from './app';
+import { env } from './config/env';
+import { initOrm } from './db/orm';
 
 async function bootstrap() {
   await initOrm();
@@ -11,6 +11,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error("Failed to start server", error);
+  console.error('Failed to start server', error);
   process.exit(1);
 });

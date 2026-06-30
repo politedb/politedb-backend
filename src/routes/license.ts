@@ -1,32 +1,24 @@
-import { Router } from "express";
+import { Router } from 'express';
 import {
   activatePolarLicenseKey,
   deactivatePolarLicenseKey,
   validatePolarLicenseKey,
-} from "../services/polar-license-key";
+} from '../services/polar-license-key.service';
+import { wrapHandler } from '@/utils/wrap-handler';
 
 export const licenseRouter = Router();
 
-licenseRouter.post("/activate", async (req, res, next) => {
-  try {
-    res.json(await activatePolarLicenseKey(req.body));
-  } catch (error) {
-    next(error);
-  }
-});
+licenseRouter.post(
+  '/activate',
+  wrapHandler(async (req) => activatePolarLicenseKey(req.body)),
+);
 
-licenseRouter.post("/validate", async (req, res, next) => {
-  try {
-    res.json(await validatePolarLicenseKey(req.body));
-  } catch (error) {
-    next(error);
-  }
-});
+licenseRouter.post(
+  '/validate',
+  wrapHandler(async (req) => validatePolarLicenseKey(req.body)),
+);
 
-licenseRouter.post("/deactivate", async (req, res, next) => {
-  try {
-    res.json(await deactivatePolarLicenseKey(req.body));
-  } catch (error) {
-    next(error);
-  }
-});
+licenseRouter.post(
+  '/deactivate',
+  wrapHandler(async (req) => deactivatePolarLicenseKey(req.body)),
+);

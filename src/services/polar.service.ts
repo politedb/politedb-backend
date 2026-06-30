@@ -1,18 +1,18 @@
-import { z } from "zod";
-import { env } from "../config/env";
-import { getPolarClient } from "../libs/polar";
-import { normalizeHeaders } from "../utils/common";
-import { canSendLicenseEmails, sendLicenseIssuedEmail } from "./email-service";
+import { z } from 'zod';
+import { env } from '../config/env';
+import { getPolarClient } from '../libs/polar';
+import { normalizeHeaders } from '../utils/common';
+import { canSendLicenseEmails, sendLicenseIssuedEmail } from './email.service';
 import {
   getPolarLicenseKeyDelivery,
   markPolarLicenseKeyEmailFailed,
   markPolarLicenseKeyEmailSent,
   upsertPolarLicenseKeyDelivery,
-} from "./polar-license-delivery";
+} from './polar-license-delivery.service';
 
-const polarWebhookModule = require("@polar-sh/sdk/webhooks") as {
-  validateEvent: typeof import("@polar-sh/sdk/dist/commonjs/webhooks.js").validateEvent;
-  WebhookVerificationError: typeof import("@polar-sh/sdk/dist/commonjs/webhooks.js").WebhookVerificationError;
+const polarWebhookModule = require('@polar-sh/sdk/webhooks') as {
+  validateEvent: typeof import('@polar-sh/sdk/dist/commonjs/webhooks.js').validateEvent;
+  WebhookVerificationError: typeof import('@polar-sh/sdk/dist/commonjs/webhooks.js').WebhookVerificationError;
 };
 
 const { validateEvent, WebhookVerificationError } = polarWebhookModule;
@@ -41,7 +41,7 @@ const checkoutSchema = z.object({
 function getCheckoutProductIds(requested?: string[]) {
   const productIds = requested?.length ? requested : env.polarProductIds;
   if (!productIds.length) {
-    throw new Error("POLAR_PRODUCT_IDS is required unless productIds is provided");
+    throw new Error('POLAR_PRODUCT_IDS is required unless productIds is provided');
   }
 
   return productIds;
@@ -50,7 +50,7 @@ function getCheckoutProductIds(requested?: string[]) {
 function getSuccessUrl(requested?: string) {
   const successUrl = requested ?? env.polarSuccessUrl ?? undefined;
   if (!successUrl) {
-    throw new Error("POLAR_SUCCESS_URL is required unless successUrl is provided");
+    throw new Error('POLAR_SUCCESS_URL is required unless successUrl is provided');
   }
 
   return successUrl;
@@ -73,8 +73,8 @@ async function maybeSendPolarLicenseKeyEmail(event: {
 }) {
   if (!event.customerEmail) {
     return {
-      status: "skipped" as const,
-      reason: "CUSTOMER_EMAIL_MISSING",
+      status: 'skipped' as const,
+      reason: 'CUSTOMER_EMAIL_MISSING',
     };
   }
 
@@ -89,22 +89,22 @@ async function maybeSendPolarLicenseKeyEmail(event: {
   const delivery = await getPolarLicenseKeyDelivery(event.grantId);
   if (delivery?.emailSentAt) {
     return {
-      status: "skipped" as const,
-      reason: "ALREADY_SENT",
+      status: 'skipped' as const,
+      reason: 'ALREADY_SENT',
     };
   }
 
   if (!canSendLicenseEmails()) {
     return {
-      status: "skipped" as const,
-      reason: "EMAIL_NOT_CONFIGURED",
+      status: 'skipped' as const,
+      reason: 'EMAIL_NOT_CONFIGURED',
     };
   }
 
   if (!event.licenseKeyId) {
     return {
-      status: "skipped" as const,
-      reason: "LICENSE_KEY_NOT_READY",
+      status: 'skipped' as const,
+      reason: 'LICENSE_KEY_NOT_READY',
     };
   }
 
@@ -114,7 +114,7 @@ async function maybeSendPolarLicenseKeyEmail(event: {
       to: event.customerEmail,
       customerName: event.customerName,
       product: event.productName?.trim() || env.defaultProduct,
-      planName: event.planName?.trim() || "Polar License",
+      planName: event.planName?.trim() || 'Polar License',
       licenseKey: licenseKey.key,
       instanceName: null,
       seatsAllowed: licenseKey.limitActivations ?? 1,
@@ -122,14 +122,14 @@ async function maybeSendPolarLicenseKeyEmail(event: {
     });
     await markPolarLicenseKeyEmailSent(event.grantId);
     return {
-      status: "sent" as const,
+      status: 'sent' as const,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "UNKNOWN_EMAIL_ERROR";
+    const message = error instanceof Error ? error.message : 'UNKNOWN_EMAIL_ERROR';
     await markPolarLicenseKeyEmailFailed(event.grantId, message);
     console.error(`Failed to send Polar license key email for grant ${event.grantId}: ${message}`);
     return {
-      status: "failed" as const,
+      status: 'failed' as const,
       reason: message,
     };
   }
@@ -143,7 +143,7 @@ export async function createPolarCheckout(payload: unknown) {
     ...(input.licenseProduct ? { licenseProduct: input.licenseProduct } : {}),
     ...(input.planName ? { planName: input.planName } : {}),
     ...(input.instanceName ? { instanceName: input.instanceName } : {}),
-    ...(typeof input.seatsAllowed === "number" ? { seatsAllowed: input.seatsAllowed } : {}),
+    ...(typeof input.seatsAllowed === 'number' ? { seatsAllowed: input.seatsAllowed } : {}),
     ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
   };
   const checkout = await polar.checkouts.create({
@@ -172,14 +172,14 @@ export async function handlePolarWebhook(
   headers: Record<string, string | string[] | undefined>,
 ) {
   if (!env.polarWebhookSecret) {
-    throw new Error("POLAR_WEBHOOK_SECRET is required");
+    throw new Error('POLAR_WEBHOOK_SECRET is required');
   }
 
   const event = validateEvent(rawBody, normalizeHeaders(headers), env.polarWebhookSecret);
 
   switch (event.type) {
-    case "benefit_grant.created": {
-      if (event.data.benefit.type !== "license_keys") {
+    case 'benefit_grant.created': {
+      if (event.data.benefit.type !== 'license_keys') {
         return {
           received: true,
           eventType: event.type,
@@ -193,8 +193,8 @@ export async function handlePolarWebhook(
         grantId: event.data.id,
         orderId: event.data.orderId,
         benefitId: event.data.benefitId,
-        productName: "PoliteDB",
-        planName: event.data.benefit.description.replace("License Key", ""),
+        productName: 'PoliteDB',
+        planName: event.data.benefit.description.replace('License Key', ''),
         licenseKeyId: properties.licenseKeyId,
         customerEmail: event.data.customer.email,
         customerName: event.data.customer.name,
@@ -208,42 +208,42 @@ export async function handlePolarWebhook(
           benefitId: event.data.benefitId,
           orderId: event.data.orderId,
           customerId: event.data.customerId,
-          source: "polar",
+          source: 'polar',
         },
         licenseEmail,
       };
     }
 
-    case "order.paid":
+    case 'order.paid':
       return {
         received: true,
         eventType: event.type,
         result: {
           orderId: event.data.id,
-          status: "received",
-          source: "polar",
+          status: 'received',
+          source: 'polar',
         },
       };
 
-    case "order.refunded":
+    case 'order.refunded':
       return {
         received: true,
         eventType: event.type,
         result: {
           orderId: event.data.id,
-          status: "received",
-          source: "polar",
+          status: 'received',
+          source: 'polar',
         },
       };
 
-    case "subscription.revoked":
+    case 'subscription.revoked':
       return {
         received: true,
         eventType: event.type,
         result: {
           subscriptionId: event.data.id,
-          status: "received",
-          source: "polar",
+          status: 'received',
+          source: 'polar',
         },
       };
 

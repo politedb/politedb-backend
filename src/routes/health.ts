@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router } from 'express';
 
 export const healthRouter = Router();
 
-healthRouter.get("/", (_req, res) => {
+healthRouter.get('/', (_req, res) => {
   res.json({
-    status: "ok",
-    service: "politedb",
+    status: 'ok',
+    service: 'politedb',
     timestamp: new Date().toISOString(),
   });
 });

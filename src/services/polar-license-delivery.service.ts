@@ -1,5 +1,5 @@
-import { PolarLicenseDelivery } from "../db/entities";
-import { getEm } from "../db/orm";
+import { PolarLicenseDelivery } from '../db/entities';
+import { getEm } from '../db/orm';
 
 function now() {
   return new Date();

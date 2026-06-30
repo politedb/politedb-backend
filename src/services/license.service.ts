@@ -1,8 +1,8 @@
-import { z } from "zod";
-import { env } from "../config/env";
-import { Activation, License } from "../db/entities";
-import { getEm } from "../db/orm";
-import { createId, createLicenseKey } from "../utils/license-key";
+import { z } from 'zod';
+import { env } from '../config/env';
+import { Activation, License } from '../db/entities';
+import { getEm } from '../db/orm';
+import { createId, createLicenseKey } from '../utils/license-key';
 
 const createLicenseSchema = z.object({
   product: z.string().min(1).default(env.defaultProduct),
@@ -39,7 +39,7 @@ function toLicenseResponse(license: License, devicesUsed?: number) {
 
 async function countActiveDevices(licenseId: string) {
   const em = getEm();
-  return em.count(Activation, { license: licenseId, status: "active" });
+  return em.count(Activation, { license: licenseId, status: 'active' });
 }
 
 export async function createLicense(payload: unknown) {
@@ -48,13 +48,13 @@ export async function createLicense(payload: unknown) {
   const license = em.create(License, {
     id: createId(),
     product: input.product,
-    licenseKey: input.licenseKey ?? createLicenseKey("PLD"),
+    licenseKey: input.licenseKey ?? createLicenseKey('PLD'),
     planName: input.planName,
     customerEmail: input.customerEmail,
     instanceName: input.instanceName ?? null,
     seatsAllowed: input.seatsAllowed,
     expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-    status: "active",
+    status: 'active',
     notes: input.notes ?? null,
     createdAt: now(),
     updatedAt: now(),
@@ -67,13 +67,15 @@ export async function createLicense(payload: unknown) {
 
 export async function listLicenses() {
   const em = getEm();
-  const licenses = await em.find(License, {}, { orderBy: { createdAt: "DESC" } });
+  const licenses = await em.find(License, {}, { orderBy: { createdAt: 'DESC' } });
 
-  return Promise.all(
+  const items = await Promise.all(
     licenses.map(async (license: License) =>
       toLicenseResponse(license, await countActiveDevices(license.id)),
     ),
   );
+
+  return { items };
 }
 
 export async function revokeLicense(licenseId: string) {
@@ -81,17 +83,17 @@ export async function revokeLicense(licenseId: string) {
   const license = await em.findOne(License, { id: licenseId });
 
   if (!license) {
-    throw new Error("LICENSE_NOT_FOUND");
+    throw new Error('LICENSE_NOT_FOUND');
   }
 
-  license.status = "revoked";
+  license.status = 'revoked';
   license.updatedAt = now();
 
-  const activations = await em.find(Activation, { license: licenseId, status: "active" });
+  const activations = await em.find(Activation, { license: licenseId, status: 'active' });
   const deactivatedAt = now();
 
   for (const activation of activations) {
-    activation.status = "inactive";
+    activation.status = 'inactive';
     activation.deactivatedAt = deactivatedAt;
     activation.lastValidatedAt = deactivatedAt;
   }
@@ -100,6 +102,6 @@ export async function revokeLicense(licenseId: string) {
 
   return {
     licenseId,
-    status: "revoked",
+    status: 'revoked',
   };
 }
