@@ -7,7 +7,16 @@
   "scripts": {
     "dev": "tsx watch --include 'src/**/*.ts' src/server.ts",
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "db:migration:create": "mikro-orm migration:create --config ./src/db/mikro-orm.config.ts",
+    "db:migration:up": "mikro-orm migration:up --config ./src/db/mikro-orm.config.ts",
+    "db:migration:down": "mikro-orm migration:down --config ./src/db/mikro-orm.config.ts",
+    "db:migration:list": "mikro-orm migration:list --config ./src/db/mikro-orm.config.ts",
+    "db:migration:pending": "mikro-orm migration:pending --config ./src/db/mikro-orm.config.ts"
   },
   "keywords": [
     "express",
@@ -19,6 +28,7 @@
   "license": "ISC",
   "dependencies": {
     "@mikro-orm/core": "6.6.13",
+    "@mikro-orm/migrations": "^6.6.13",
     "@mikro-orm/postgresql": "6.6.13",
     "@polar-sh/sdk": "^0.47.0",
     "@types/nodemailer": "^8.0.0",
@@ -33,12 +43,19 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@mikro-orm/cli": "^6.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.10.0",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "3.9.4",
+    "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.17",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.62.1"
   }
 }

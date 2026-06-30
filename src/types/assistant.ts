@@ -195,13 +195,7 @@ export type AIThreadDetail = {
 import type { AIIntent } from '@/shared/ai/intent-classifier';
 
 export type AIProviderName =
-  | 'openai'
-  | 'deepseek'
-  | 'anthropic'
-  | 'google'
-  | 'xai'
-  | 'moonshot'
-  | 'zhipu';
+  'openai' | 'deepseek' | 'anthropic' | 'google' | 'xai' | 'moonshot' | 'zhipu';
 
 export type AIModelOption = {
   id: string;

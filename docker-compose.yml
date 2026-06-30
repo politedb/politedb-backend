@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: politedb-postgres
     restart: unless-stopped
     environment:
@@ -8,11 +8,11 @@ services:
       POSTGRES_USER: politedb
       POSTGRES_PASSWORD: politedb
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U politedb -d politedb"]
+      test: ['CMD-SHELL', 'pg_isready -U politedb -d politedb']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,8 +22,8 @@ services:
     container_name: politedb-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - '1025:1025'
+      - '8025:8025'
 
 volumes:
   postgres_data:

@@ -1,4 +1,5 @@
 import { Collection, EntitySchema } from '@mikro-orm/core';
+import { env } from '@/config/env';
 
 export class License {
   id!: string;
@@ -668,7 +669,10 @@ export const AiRagEmbeddingSchema = new EntitySchema<AiRagEmbedding>({
     contentHash: { type: 'string', fieldName: 'content_hash' },
     model: { type: 'string' },
     dimensions: { type: 'number' },
-    embeddingVector: { type: 'vector(1536)', fieldName: 'embedding_vector' },
+    embeddingVector: {
+      type: env.aiEnableSemanticCache ? 'vector(1536)' : 'text',
+      fieldName: 'embedding_vector',
+    },
     createdAt: { type: 'datetime', fieldName: 'created_at' },
   },
 });

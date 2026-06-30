@@ -98,11 +98,9 @@ export class PromptBuilderService {
   }
 
   private buildHistory(messages: AIStoredMessage[]) {
-    return messages.slice(-8).map(
-      (message): AIMessage => ({
-        role: message.role === 'tool' ? 'assistant' : message.role,
-        content: message.content,
-      }),
-    );
+    return messages.slice(-8).map((message): AIMessage => ({
+      role: message.role === 'tool' ? 'assistant' : message.role,
+      content: message.content,
+    }));
   }
 }

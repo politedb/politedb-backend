@@ -130,13 +130,7 @@ export const env = {
             : aiProvider === 'zhipu'
               ? 'zhipu'
               : 'openai') as
-    | 'openai'
-    | 'deepseek'
-    | 'anthropic'
-    | 'google'
-    | 'xai'
-    | 'moonshot'
-    | 'zhipu',
+    'openai' | 'deepseek' | 'anthropic' | 'google' | 'xai' | 'moonshot' | 'zhipu',
   aiDefaultFreeModel: (process.env.AI_DEFAULT_FREE_MODEL ?? 'gpt-4.1-nano').trim(),
   aiDefaultUltimateModel: (process.env.AI_DEFAULT_ULTIMATE_MODEL ?? 'gpt-4.1').trim(),
   aiEmbeddingModel: (process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-small').trim(),

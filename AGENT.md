@@ -114,8 +114,9 @@ AI:
 ## Database Notes
 
 - ORM initialization runs in `initOrm()`.
-- On startup, the app currently calls `orm.getSchemaGenerator().updateSchema()`.
-- This means production startup can mutate schema automatically. Keep that in mind before changing entities.
+- On startup, the app runs pending MikroORM migrations via `orm.getMigrator().up()`.
+- Do not use `orm.getSchemaGenerator().updateSchema()` in production startup.
+- Create schema changes with `npm run db:migration:create -- --name <name>`.
 
 ## Deploy Notes
 

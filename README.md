@@ -73,6 +73,19 @@ By default, the server runs at `http://localhost:4000`.
 - `SMTP_PASS`: optional SMTP password
 - `SMTP_FROM`: sender email address used for license delivery
 
+## Database Migrations
+
+The server uses MikroORM migrations instead of automatic schema sync.
+
+```bash
+npm run db:migration:create -- --name add_feature_table
+npm run db:migration:up
+npm run db:migration:down
+npm run db:migration:pending
+```
+
+Pending migrations also run during server startup via `initOrm()`.
+
 ## Available Scripts
 
 ### Run in development mode
