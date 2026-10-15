@@ -61,7 +61,8 @@ export async function markPolarLicenseKeyEmailSent(grantId: string) {
 export async function markPolarLicenseKeyEmailFailed(grantId: string, error: string) {
   const em = getEm();
   const delivery = await em.findOneOrFail(PolarLicenseDelivery, { grantId });
-  delivery.emailError = error;
+  // Column is varchar(255); SMTP errors can be longer.
+  delivery.emailError = error.slice(0, 255);
   delivery.updatedAt = now();
   await em.flush();
 }

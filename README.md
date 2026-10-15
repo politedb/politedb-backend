@@ -261,9 +261,24 @@ VITE_LICENSE_PRODUCT=politedb
 - `src/app.ts`: Express app configuration and error handling
 - `src/routes`: HTTP route definitions
 - `src/services/license-service.ts`: legacy admin license persistence
-- `src/db/orm.ts`: MikroORM bootstrap
+- `src/db/orm.ts`: MikroORM bootstrap; applies pending migrations on startup
+- `src/migrations`: schema migrations, listed in `src/migrations/index.ts`
 - `src/db/entities.ts`: MikroORM entity schemas
 - `src/utils/licenseKey.ts`: license key and token generation helpers
+
+## Database Migrations
+
+The schema is managed by MikroORM migrations, applied automatically on startup (each in a transaction). The server no longer calls `updateSchema()`.
+
+- The initial migration is a baseline. On a database created by older versions (which used `updateSchema()`), it only records itself as applied.
+- To change the schema: edit `src/db/entities.ts`, run `npm run db:diff` against a database at the current schema, put the printed SQL into a new `src/migrations/MigrationYYYYMMDDHHMMSS<Name>.ts`, and append it to `src/migrations/index.ts`.
+- `npm run db:diff` against production should print `-- schema matches entities`.
+- Migration tests run against a disposable Postgres when `TEST_POSTGRES_URL` is set (they are skipped otherwise):
+
+```bash
+docker run --rm -p 55432:5432 -e POSTGRES_PASSWORD=test postgres:16
+TEST_POSTGRES_URL=postgresql://postgres:test@localhost:55432/postgres npm test
+```
 
 ## Notes
 
