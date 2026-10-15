@@ -246,10 +246,23 @@ VITE_LICENSE_PRODUCT=politedb
 ## Operations
 
 - `GET /api/health` returns `200` with `checks.database: "up"`, or `503` when the database is unreachable.
-- Per-IP rate limits (in memory, one PM2 instance): license endpoints 60/min, checkout 10/min, admin 30/min. Exceeding them returns `429 RATE_LIMITED`. Polar webhooks are not rate limited.
+- Per-IP rate limits (in memory, per instance): license endpoints 60/min, checkout 10/min, admin 30/min. Exceeding them returns `429 RATE_LIMITED`. Polar webhooks are not rate limited.
+- On Render (`RENDER=true`), rate limiting stays **disabled until `TRUST_PROXY` is set**, because without it every request appears to come from Render's proxy and all users would share one limit. A warning is logged at startup.
 - CORS only allows the configured browser origins (see `CHECKOUT_ALLOWED_ORIGINS`). The desktop app and Polar webhooks are unaffected by CORS.
 - On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, matching PM2 `kill_timeout`), then closes the database pool.
 - Logs include `rid=` from the `x-request-id` header when a proxy sets it.
+
+## Render
+
+Production runs on Render. Recommended service settings:
+
+- Build command: `npm ci --include=dev && npm run build` (TypeScript is a dev dependency)
+- Start command: `node dist/server.js`
+- Health check path: `/api/health` (Render only switches traffic to a new deploy once it passes)
+- Auto-Deploy: "After CI checks pass", so a failing `npm test` blocks the deploy
+- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. To measure it, call `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7` header. Increase `TRUST_PROXY` from `1` until `ip` equals your real IP in **both** calls. The fake value must never appear as `ip`.
+
+Render sends `SIGTERM` on deploys and restarts; the server drains in-flight requests before exiting.
 
 ## Database Migrations
 
