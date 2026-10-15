@@ -34,6 +34,25 @@ const checkoutAllowedOrigins = [
   ),
 ];
 
+/**
+ * Express `trust proxy`: which hops may set X-Forwarded-For. Defaults to "loopback" (a
+ * reverse proxy on the same host). `true` would let any client spoof its IP, which breaks
+ * rate limiting and log attribution.
+ */
+function parseTrustProxy(value: string | undefined): boolean | number | string {
+  const raw = (value ?? "").trim();
+  if (!raw) {
+    return "loopback";
+  }
+  if (raw === "true" || raw === "false") {
+    return raw === "true";
+  }
+  if (/^\d+$/.test(raw)) {
+    return Number(raw);
+  }
+  return raw;
+}
+
 export const env = {
   port: Number.isFinite(portValue) ? portValue : 4000,
   adminApiKey: (process.env.LICENSE_API_KEY ?? "").trim(),
@@ -45,7 +64,11 @@ export const env = {
   polarSuccessUrl,
   polarReturnUrl,
   polarProductIds,
+  // Browser origins (landing page) allowed for CORS and checkout redirects.
   checkoutAllowedOrigins,
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  sentryDsn: (process.env.SENTRY_DSN ?? "").trim() || null,
+  sentryEnvironment: (process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development").trim(),
   smtpHost: (process.env.SMTP_HOST ?? "").trim() || null,
   smtpPort: Number(process.env.SMTP_PORT ?? 587),
   smtpSecure: (process.env.SMTP_SECURE ?? "false").trim() === "true",

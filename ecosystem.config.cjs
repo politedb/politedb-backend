@@ -9,6 +9,8 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: "512M",
+      // Matches SHUTDOWN_TIMEOUT_MS in src/server.ts so in-flight requests can finish.
+      kill_timeout: 10000,
       env: {
         NODE_ENV: process.env.NODE_ENV || "production",
       },

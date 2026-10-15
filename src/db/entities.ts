@@ -37,6 +37,7 @@ export class PolarLicenseDelivery {
   polarLicenseKeyId!: string | null;
   customerEmail!: string;
   emailSentAt!: Date | null;
+  emailClaimedAt!: Date | null;
   emailError!: string | null;
   createdAt!: Date;
   updatedAt!: Date;
@@ -102,6 +103,9 @@ export const PolarLicenseDeliverySchema = new EntitySchema<PolarLicenseDelivery>
     polarLicenseKeyId: { type: "string", nullable: true, fieldName: "polar_license_key_id" },
     customerEmail: { type: "string", fieldName: "customer_email" },
     emailSentAt: { type: "datetime", nullable: true, fieldName: "email_sent_at" },
+    // Set while one request is sending the email, so concurrent webhook deliveries
+    // for the same grant do not send it twice.
+    emailClaimedAt: { type: "datetime", nullable: true, fieldName: "email_claimed_at" },
     emailError: { type: "string", nullable: true, fieldName: "email_error" },
     createdAt: { type: "datetime", fieldName: "created_at" },
     updatedAt: { type: "datetime", fieldName: "updated_at" },

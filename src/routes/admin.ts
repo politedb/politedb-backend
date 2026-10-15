@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { env } from "../config/env";
+import { adminRateLimit } from "../middleware/rate-limit";
 import { listLicenses, revokeLicense } from "../services/license-service";
 import { listFailedLicenseEmails, resendLicenseEmail } from "../services/polar-service";
 
@@ -14,6 +15,8 @@ function isValidAdminKey(provided: string | undefined) {
   const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
   return crypto.timingSafeEqual(digest(provided), digest(env.adminApiKey));
 }
+
+adminRouter.use(adminRateLimit);
 
 adminRouter.use((req, res, next) => {
   if (!isValidAdminKey(req.header("x-api-key"))) {
