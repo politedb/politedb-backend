@@ -13,6 +13,7 @@ import {
   markPolarLicenseKeyEmailSent,
   upsertPolarLicenseKeyDelivery,
 } from "./polar-license-delivery";
+import { revokeLocalLicenseForPolarKey } from "./polar-license-key";
 
 const LICENSE_PRODUCT_NAME = "PoliteDB";
 
@@ -273,6 +274,29 @@ export async function processPolarEvent(event: PolarWebhookEvent) {
           source: "polar",
         },
         licenseEmail,
+      };
+    }
+
+    case "benefit_grant.revoked": {
+      const properties = event.data.properties as BenefitGrantLicenseKeysProperties;
+      if (event.data.benefit.type !== "license_keys" || !properties.licenseKeyId) {
+        return {
+          received: true,
+          eventType: event.type,
+          ignored: true,
+        };
+      }
+
+      // Refunds and revoked subscriptions reach us as a revoked benefit grant.
+      const revocation = await revokeLocalLicenseForPolarKey(properties.licenseKeyId);
+      return {
+        received: true,
+        eventType: event.type,
+        result: {
+          grantId: event.data.id,
+          ...revocation,
+          source: "polar",
+        },
       };
     }
 

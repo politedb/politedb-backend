@@ -117,6 +117,24 @@ describe("activate", () => {
   });
 });
 
+describe("activate after revocation", () => {
+  it("marks a re-granted license active again", async () => {
+    polar.licenseKeys.validate.mockResolvedValue(licenseKeyFixture());
+    polar.licenseKeys.get.mockResolvedValue(licenseKeyFixture());
+    polar.licenseKeys.activate.mockResolvedValue(activationFixture("act_1", device.device_id));
+    await activatePolarLicenseKey(activateBody);
+
+    const em = getEm();
+    const license = await em.findOneOrFail(License, { licenseKey: "POLAR-KEY-1" });
+    license.status = "revoked";
+    await em.flush();
+
+    await activatePolarLicenseKey(activateBody);
+
+    expect((await getEm().findOneOrFail(License, { licenseKey: "POLAR-KEY-1" })).status).toBe("active");
+  });
+});
+
 describe("validate", () => {
   const validateBody = { ...activateBody, activationToken: "act_1" };
 

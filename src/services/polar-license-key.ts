@@ -306,6 +306,8 @@ async function upsertLicenseFromActivation(input: {
     license.customerEmail = input.activation.licenseKey.customer.email;
     license.seatsAllowed = seatsFromPolar;
     license.expiresAt = input.activation.licenseKey.expiresAt;
+    // Polar just accepted the activation, so a previously revoked key was re-granted.
+    license.status = "active";
     license.updatedAt = now;
   }
 
@@ -381,6 +383,36 @@ async function touchActivationValidated(activationToken: string) {
 
   stored.lastValidatedAt = new Date();
   await em.flush();
+}
+
+/**
+ * Mirrors a Polar revocation (refund, subscription revoked, manual revoke) into our DB:
+ * the license is marked revoked and its activations stop counting as used seats.
+ * Polar itself rejects the key afterwards, so the app sees `revoked` on its next validate.
+ */
+export async function revokeLocalLicenseForPolarKey(licenseKeyId: string) {
+  const polar = getPolarClient();
+  const key = await polar.licenseKeys.get({ id: licenseKeyId });
+  const em = getEm();
+  const license = await em.findOne(License, { licenseKey: key.key });
+  if (!license) {
+    // Never activated through this backend; nothing to mirror.
+    return { licenseFound: false, activationsDeactivated: 0 };
+  }
+
+  const now = new Date();
+  license.status = "revoked";
+  license.updatedAt = now;
+
+  const activations = await em.find(Activation, { license: license.id, status: "active" });
+  for (const activation of activations) {
+    activation.status = "inactive";
+    activation.deactivatedAt = now;
+    activation.lastValidatedAt = now;
+  }
+
+  await em.flush();
+  return { licenseFound: true, activationsDeactivated: activations.length };
 }
 
 export async function activatePolarLicenseKey(payload: unknown) {
