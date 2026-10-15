@@ -1,19 +1,5 @@
-import { z } from "zod";
-import { env } from "../config/env";
 import { Activation, License } from "../db/entities";
 import { getEm } from "../db/orm";
-import { createId, createLicenseKey } from "../utils/license-key";
-
-const createLicenseSchema = z.object({
-  product: z.string().min(1).default(env.defaultProduct),
-  planName: z.string().min(1),
-  customerEmail: z.email(),
-  instanceName: z.string().trim().optional(),
-  seatsAllowed: z.int().positive().default(1),
-  expiresAt: z.iso.datetime().optional(),
-  notes: z.string().trim().optional(),
-  licenseKey: z.string().trim().optional(),
-});
 
 function now() {
   return new Date();
@@ -40,29 +26,6 @@ function toLicenseResponse(license: License, devicesUsed?: number) {
 async function countActiveDevices(licenseId: string) {
   const em = getEm();
   return em.count(Activation, { license: licenseId, status: "active" });
-}
-
-export async function createLicense(payload: unknown) {
-  const input = createLicenseSchema.parse(payload);
-  const em = getEm();
-  const license = em.create(License, {
-    id: createId(),
-    product: input.product,
-    licenseKey: input.licenseKey ?? createLicenseKey("PLD"),
-    planName: input.planName,
-    customerEmail: input.customerEmail,
-    instanceName: input.instanceName ?? null,
-    seatsAllowed: input.seatsAllowed,
-    expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
-    status: "active",
-    notes: input.notes ?? null,
-    createdAt: now(),
-    updatedAt: now(),
-  });
-
-  em.persist(license);
-  await em.flush();
-  return toLicenseResponse(license);
 }
 
 export async function listLicenses() {

@@ -7,6 +7,7 @@ import { getPolarClient } from "../libs/polar";
 import { normalizeHeaders } from "../utils/common";
 import { canSendLicenseEmails, sendLicenseIssuedEmail } from "./email-service";
 import {
+  claimPolarLicenseKeyEmail,
   getPolarLicenseKeyDelivery,
   listPolarLicenseKeyDeliveriesWithErrors,
   markPolarLicenseKeyEmailFailed,
@@ -34,9 +35,7 @@ const checkoutSchema = z.object({
   metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   licenseProduct: z.string().trim().min(1).optional(),
   planName: z.string().trim().min(1).optional(),
-  instanceName: z.string().trim().min(1).optional(),
   seatsAllowed: z.int().positive().optional(),
-  expiresAt: z.iso.datetime().optional(),
 });
 
 function getCheckoutProductIds(requested?: string[]) {
@@ -80,6 +79,8 @@ function planNameFromBenefitDescription(description: string) {
 
 type LicenseEmailContext = {
   grantId: string;
+  /** Admin resend: send even if the email already went out. */
+  resend?: boolean;
   licenseKeyId: string;
   customerEmail: string;
   customerName?: string | null;
@@ -95,6 +96,10 @@ type LicenseEmailResult =
  * so the webhook responds non-2xx and Polar retries the delivery.
  */
 async function sendLicenseEmailForGrant(context: LicenseEmailContext): Promise<LicenseEmailResult> {
+  if (!(await claimPolarLicenseKeyEmail(context.grantId, { allowSent: context.resend }))) {
+    return { status: "skipped", reason: "ALREADY_SENT_OR_IN_PROGRESS" };
+  }
+
   const polar = getPolarClient();
 
   try {
@@ -196,6 +201,7 @@ export async function resendLicenseEmail(grantId: string) {
 
   return sendLicenseEmailForGrant({
     grantId,
+    resend: true,
     licenseKeyId: delivery.polarLicenseKeyId,
     customerEmail: delivery.customerEmail,
   });
@@ -208,13 +214,12 @@ export async function createPolarCheckout(payload: unknown) {
   assertAllowedRedirect(input.returnUrl);
 
   const polar = getPolarClient();
+  // Informational only (shown on the order in Polar); nothing reads it back.
   const metadata = {
     ...(input.metadata ?? {}),
     ...(input.licenseProduct ? { licenseProduct: input.licenseProduct } : {}),
     ...(input.planName ? { planName: input.planName } : {}),
-    ...(input.instanceName ? { instanceName: input.instanceName } : {}),
     ...(typeof input.seatsAllowed === "number" ? { seatsAllowed: input.seatsAllowed } : {}),
-    ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
   };
   const checkout = await polar.checkouts.create({
     products,
@@ -299,39 +304,6 @@ export async function processPolarEvent(event: PolarWebhookEvent) {
         },
       };
     }
-
-    case "order.paid":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          orderId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
-
-    case "order.refunded":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          orderId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
-
-    case "subscription.revoked":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          subscriptionId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
 
     default:
       return {

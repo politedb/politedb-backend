@@ -175,22 +175,6 @@ async function countActiveDevicesForLicenseKey(licenseKey: string) {
   return em.count(Activation, { license: license.id, status: "active" });
 }
 
-async function resolveLicenseKeyForDeactivation(activationToken?: string, licenseKey?: string) {
-  if (licenseKey && activationToken) {
-    return licenseKey;
-  }
-
-  if (!activationToken) {
-    throw badRequest("ACTIVATION_NOT_FOUND");
-  }
-
-  if (!licenseKey) {
-    throw badRequest("LICENSE_KEY_REQUIRED");
-  }
-
-  return licenseKey;
-}
-
 /**
  * Releases any activation this device already holds, on Polar and in our DB, so the
  * device can activate again after losing its activation token (reinstall, data reset,
@@ -356,10 +340,6 @@ async function upsertDeviceActivation(input: {
   await em.flush();
 }
 
-async function countActiveDevices(licenseId: string) {
-  return getEm().count(Activation, { license: licenseId, status: "active" });
-}
-
 async function markActivationDeactivatedByToken(activationToken: string) {
   const em = getEm();
   const stored = await em.findOne(Activation, { activationToken });
@@ -443,7 +423,7 @@ export async function activatePolarLicenseKey(payload: unknown) {
     device: input.device,
     activationToken: activation.id,
   });
-  const devicesUsed = await countActiveDevices(license.id);
+  const devicesUsed = (await countActiveDevicesForLicenseKey(input.licenseKey)) ?? 0;
 
   return mapActivationResponse(input.product, input.licenseKey, planName, activation, devicesUsed);
 }
@@ -496,14 +476,13 @@ export async function validatePolarLicenseKey(payload: unknown) {
 
 export async function deactivatePolarLicenseKey(payload: unknown) {
   const input = deactivateSchema.parse(payload);
-  const licenseKey = await resolveLicenseKeyForDeactivation(
-    input.activationToken,
-    input.licenseKey,
-  );
-
   if (!input.activationToken) {
     throw badRequest("ACTIVATION_NOT_FOUND");
   }
+  if (!input.licenseKey) {
+    throw badRequest("LICENSE_KEY_REQUIRED");
+  }
+  const licenseKey = input.licenseKey;
 
   const polar = getPolarClient();
   await polar.licenseKeys.deactivate({

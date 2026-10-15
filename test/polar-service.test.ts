@@ -140,6 +140,23 @@ describe("license email webhook", () => {
   });
 });
 
+describe("concurrent webhook deliveries", () => {
+  it("send the license email only once", async () => {
+    let release!: () => void;
+    sendLicenseIssuedEmail.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const first = processPolarEvent(grantEvent("benefit_grant.created", "lk_1"));
+    // Let the first delivery claim the grant and start sending.
+    await vi.waitFor(() => expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(1));
+    const second = await processPolarEvent(grantEvent("benefit_grant.updated", "lk_1"));
+    release();
+
+    expect(await first).toMatchObject({ licenseEmail: { status: "sent" } });
+    expect(second).toMatchObject({ licenseEmail: { status: "skipped" } });
+    expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("admin API", () => {
   const adminKey = "test-admin-key";
 
@@ -168,6 +185,17 @@ describe("admin API", () => {
 
     const after = await request(app).get("/api/v1/admin/license-emails/failed").set("x-api-key", adminKey);
     expect(after.body.items).toEqual([]);
+  });
+
+  it("can resend an email that was already delivered", async () => {
+    await processPolarEvent(grantEvent("benefit_grant.created", "lk_1"));
+
+    const resent = await request(app)
+      .post("/api/v1/admin/license-emails/grant_1/resend")
+      .set("x-api-key", adminKey);
+
+    expect(resent.body).toEqual({ status: "sent" });
+    expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(2);
   });
 
   it("returns 400, not 404, for an unknown grant", async () => {
