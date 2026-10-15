@@ -259,7 +259,7 @@ Production runs on Render. Recommended service settings:
 - Build command: `npm ci --include=dev && npm run build` (TypeScript is a dev dependency)
 - Start command: `node dist/server.js`
 - Health check path: `/api/health` (Render only switches traffic to a new deploy once it passes)
-- Auto-Deploy: "After CI checks pass". `.github/workflows/ci.yml` runs the build and the full test suite (including migration tests on Postgres) on every pull request and push to `main`, so a failure blocks the deploy
+- Auto-Deploy: "After CI checks pass". `.github/workflows/deploy-render.yml` runs the build and the full test suite (including migration tests on Postgres) on every pull request and push to `main`, so a failure blocks the deploy
 - `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. To measure it, call `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7` header. Increase `TRUST_PROXY` from `1` until `ip` equals your real IP in **both** calls. The fake value must never appear as `ip`.
 
 Render sends `SIGTERM` on deploys and restarts; the server drains in-flight requests before exiting.
