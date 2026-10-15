@@ -1,7 +1,7 @@
-name: CI
+name: Deploy Render
 
-# Production deploys on Render with Auto-Deploy set to "After CI checks pass", so this
-# workflow gates every deploy from main.
+# Tests every pull request and push to main. On main, a passing build triggers the Render
+# deploy hook for that exact commit. Render's own Auto-Deploy must be off.
 on:
   pull_request:
   push:
@@ -50,3 +50,32 @@ jobs:
 
       - name: Test
         run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Queue deploys instead of cancelling one that is already running.
+    concurrency:
+      group: deploy-render
+      cancel-in-progress: false
+
+    steps:
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set"
+            exit 1
+          fi
+          # Deploy the tested commit, not whatever is newest on main. The hook URL holds a
+          # secret key, so never print it.
+          status="$(curl -sS -o response.json -w '%{http_code}' -X POST \
+            "${RENDER_DEPLOY_HOOK_URL}&ref=${GITHUB_SHA}")"
+          case "$status" in
+            200) echo "Render deploy started: $(cat response.json)" ;;
+            202) echo "Render queued this deploy behind one in progress" ;;
+            *) echo "::error::Render deploy hook returned HTTP $status"; exit 1 ;;
+          esac
