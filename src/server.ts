@@ -4,11 +4,18 @@ initErrorReporting();
 import { app } from "./app";
 import { env } from "./config/env";
 import { getOrm, initOrm } from "./db/orm";
+import { rateLimitEnabled } from "./middleware/rate-limit";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 async function bootstrap() {
   await initOrm();
+
+  if (!rateLimitEnabled) {
+    console.warn(
+      "Rate limiting is disabled: running on Render without TRUST_PROXY. Set TRUST_PROXY to the measured proxy hop count.",
+    );
+  }
 
   const server = app.listen(env.port, () => {
     console.log(`Server is listening on port ${env.port}`);

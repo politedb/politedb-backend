@@ -67,6 +67,10 @@ export const env = {
   // Browser origins (landing page) allowed for CORS and checkout redirects.
   checkoutAllowedOrigins,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  trustProxyConfigured: Boolean((process.env.TRUST_PROXY ?? "").trim()),
+  // Render sets RENDER=true. Its proxies sit in front of the app, so the client IP is only
+  // correct once TRUST_PROXY is set to the measured hop count.
+  runningOnRender: process.env.RENDER === "true",
   sentryDsn: (process.env.SENTRY_DSN ?? "").trim() || null,
   sentryEnvironment: (process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development").trim(),
   smtpHost: (process.env.SMTP_HOST ?? "").trim() || null,

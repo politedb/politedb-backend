@@ -43,6 +43,17 @@ adminRouter.post("/licenses/:licenseId/revoke", async (req, res, next) => {
   }
 });
 
+// Shows how the app sees the caller's IP. Call it from a known IP (optionally with a fake
+// X-Forwarded-For) to choose TRUST_PROXY: `ip` must equal your real public IP.
+adminRouter.get("/debug/client-ip", (req, res) => {
+  res.json({
+    ip: req.ip,
+    ips: req.ips,
+    forwardedFor: req.get("x-forwarded-for") ?? null,
+    trustProxy: env.trustProxy,
+  });
+});
+
 adminRouter.get("/license-emails/failed", async (_req, res, next) => {
   try {
     res.json({ items: await listFailedLicenseEmails() });

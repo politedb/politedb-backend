@@ -1,7 +1,21 @@
+import type { RequestHandler } from "express";
 import { rateLimit } from "express-rate-limit";
+import { env } from "../config/env";
 
-// In-memory counters: correct for the single PM2 fork instance this service runs as.
-function limiter(windowMs: number, limit: number) {
+/**
+ * Behind Render's proxies without TRUST_PROXY, every request appears to come from the
+ * proxy, so per-IP limits would throttle all users together. Disable limiting until the
+ * hop count is configured (see GET /v1/admin/debug/client-ip).
+ */
+export const rateLimitEnabled = !(env.runningOnRender && !env.trustProxyConfigured);
+
+const passThrough: RequestHandler = (_req, _res, next) => next();
+
+// In-memory counters, per process: with several instances each one counts separately.
+function limiter(windowMs: number, limit: number): RequestHandler {
+  if (!rateLimitEnabled) {
+    return passThrough;
+  }
   return rateLimit({
     windowMs,
     limit,

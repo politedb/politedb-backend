@@ -74,3 +74,32 @@ describe("rate limiting", () => {
     expect(statuses).not.toContain(429);
   });
 });
+
+describe("client IP diagnostics", () => {
+  it("is admin-only and reports how the client IP is resolved", async () => {
+    expect((await request(app).get("/api/v1/admin/debug/client-ip")).status).toBe(401);
+
+    const res = await request(app)
+      .get("/api/v1/admin/debug/client-ip")
+      .set("x-api-key", "test-admin-key")
+      .set("X-Forwarded-For", "203.0.113.7");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ forwardedFor: "203.0.113.7", trustProxy: "loopback" });
+  });
+});
+
+describe("rate limiting on Render without TRUST_PROXY", () => {
+  it("is disabled instead of throttling all users as one IP", async () => {
+    vi.resetModules();
+    vi.stubEnv("RENDER", "true");
+    vi.stubEnv("TRUST_PROXY", "");
+    try {
+      const { rateLimitEnabled } = await import("../src/middleware/rate-limit");
+      expect(rateLimitEnabled).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+});
