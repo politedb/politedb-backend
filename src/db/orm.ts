@@ -1,5 +1,7 @@
-import { MikroORM } from "@mikro-orm/postgresql";
+import { Migrator } from "@mikro-orm/migrations";
+import { MikroORM, type Options } from "@mikro-orm/postgresql";
 import { env } from "../config/env";
+import { migrationsList } from "../migrations";
 import { entities } from "./entities";
 
 let orm: any = null;
@@ -12,17 +14,37 @@ function getClientUrl() {
   return env.databaseUrl;
 }
 
+export function ormConfig(clientUrl: string): Options {
+  return {
+    entities,
+    clientUrl,
+    extensions: [Migrator],
+    migrations: {
+      migrationsList,
+      // Each migration runs in a transaction; a failure leaves the schema unchanged.
+      transactional: true,
+      allOrNothing: true,
+      // Snapshots are only for `migration:create`; never write files at runtime.
+      snapshot: false,
+    },
+  };
+}
+
 export async function initOrm() {
   if (!orm) {
-    orm = await MikroORM.init({
-      entities,
-      clientUrl: getClientUrl(),
-    });
+    orm = await MikroORM.init(ormConfig(getClientUrl()));
 
-    await orm.getSchemaGenerator().updateSchema();
+    // Explicit migrations instead of `updateSchema()`, which could alter or drop columns
+    // on every boot based on entity definitions.
+    await orm.getMigrator().up();
   }
 
   return orm;
+}
+
+/** Tests only: inject an ORM (e.g. in-memory SQLite) instead of connecting to Postgres. */
+export function setOrmForTesting(instance: unknown) {
+  orm = instance;
 }
 
 export function getOrm() {

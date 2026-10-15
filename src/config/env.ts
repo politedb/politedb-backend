@@ -1,4 +1,3 @@
-import path from "node:path";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -9,19 +8,71 @@ const polarProductIds = (process.env.POLAR_PRODUCT_IDS ?? "")
   .map((value) => value.trim())
   .filter(Boolean);
 
+function originOf(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+const polarSuccessUrl = (process.env.POLAR_SUCCESS_URL ?? "").trim() || null;
+const polarReturnUrl = (process.env.POLAR_RETURN_URL ?? "").trim() || null;
+
+// Origins a client may use for checkout success/return URLs. Defaults to the origins of
+// POLAR_SUCCESS_URL / POLAR_RETURN_URL; CHECKOUT_ALLOWED_ORIGINS adds more (comma-separated).
+const checkoutAllowedOrigins = [
+  ...new Set(
+    [
+      originOf(polarSuccessUrl),
+      originOf(polarReturnUrl),
+      ...(process.env.CHECKOUT_ALLOWED_ORIGINS ?? "").split(",").map((value) => originOf(value.trim())),
+    ].filter((value): value is string => Boolean(value)),
+  ),
+];
+
+/**
+ * Express `trust proxy`: which hops may set X-Forwarded-For. Defaults to "loopback" (a
+ * reverse proxy on the same host). `true` would let any client spoof its IP, which breaks
+ * rate limiting and log attribution.
+ */
+function parseTrustProxy(value: string | undefined): boolean | number | string {
+  const raw = (value ?? "").trim();
+  if (!raw) {
+    return "loopback";
+  }
+  if (raw === "true" || raw === "false") {
+    return raw === "true";
+  }
+  if (/^\d+$/.test(raw)) {
+    return Number(raw);
+  }
+  return raw;
+}
+
 export const env = {
   port: Number.isFinite(portValue) ? portValue : 4000,
-  adminApiKey: (process.env.LICENSE_API_KEY ?? "change-me").trim(),
-  defaultProduct: (process.env.DEFAULT_PRODUCT ?? "politedb").trim(),
-  databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/license-key.db"),
+  adminApiKey: (process.env.LICENSE_API_KEY ?? "").trim(),
   databaseUrl: (process.env.DATABASE_URL ?? "").trim(),
   polarAccessToken: (process.env.POLAR_ACCESS_TOKEN ?? "").trim(),
   polarOrganizationId: (process.env.POLAR_ORGANIZATION_ID ?? "").trim(),
   polarWebhookSecret: (process.env.POLAR_WEBHOOK_SECRET ?? "").trim(),
   polarServer: (polarMode === "production" ? "production" : "sandbox") as "production" | "sandbox",
-  polarSuccessUrl: (process.env.POLAR_SUCCESS_URL ?? "").trim() || null,
-  polarReturnUrl: (process.env.POLAR_RETURN_URL ?? "").trim() || null,
+  polarSuccessUrl,
+  polarReturnUrl,
   polarProductIds,
+  // Browser origins (landing page) allowed for CORS and checkout redirects.
+  checkoutAllowedOrigins,
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  trustProxyConfigured: Boolean((process.env.TRUST_PROXY ?? "").trim()),
+  // Render sets RENDER=true. Its proxies sit in front of the app, so the client IP is only
+  // correct once TRUST_PROXY is set to the measured hop count.
+  runningOnRender: process.env.RENDER === "true",
+  sentryDsn: (process.env.SENTRY_DSN ?? "").trim() || null,
+  sentryEnvironment: (process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development").trim(),
   smtpHost: (process.env.SMTP_HOST ?? "").trim() || null,
   smtpPort: Number(process.env.SMTP_PORT ?? 587),
   smtpSecure: (process.env.SMTP_SECURE ?? "false").trim() === "true",
@@ -30,6 +81,7 @@ export const env = {
   smtpFrom: (process.env.SMTP_FROM ?? "").trim() || null,
 };
 
-if (!env.adminApiKey) {
-  throw new Error("LICENSE_API_KEY is required");
+// The admin API can list and revoke licenses; never run it with a missing or placeholder key.
+if (!env.adminApiKey || env.adminApiKey === "change-me") {
+  throw new Error("LICENSE_API_KEY must be set to a non-default value");
 }
