@@ -17,7 +17,7 @@
 - Validate activation tokens
 - Deactivate a device from a license
 - Deliver Polar license keys by email
-- Store legacy admin license records and webhook delivery state in PostgreSQL
+- Store activations, license state and webhook delivery state in PostgreSQL
 
 ## Getting Started
 
@@ -58,7 +58,6 @@ By default, the server runs at `http://localhost:4000`.
 - `PORT`: server port
 - `LICENSE_API_KEY`: API key required for admin endpoints. Required; the server refuses to start if it is empty or `change-me`
 - `DATABASE_URL`: PostgreSQL connection string used by MikroORM
-- `DEFAULT_PRODUCT`: default product name used when creating licenses
 - `POLAR_ACCESS_TOKEN`: Polar organization access token
 - `POLAR_ORGANIZATION_ID`: Polar organization ID used for license key activation and validation
 - `POLAR_WEBHOOK_SECRET`: webhook secret from the Polar dashboard
@@ -66,7 +65,10 @@ By default, the server runs at `http://localhost:4000`.
 - `POLAR_PRODUCT_IDS`: comma-separated Polar product IDs that can be sold through checkout. Used as the default when the request does not provide `productIds`; requested `productIds` must be in this list
 - `POLAR_SUCCESS_URL`: default success URL for Polar checkout
 - `POLAR_RETURN_URL`: optional default return URL for Polar checkout
-- `CHECKOUT_ALLOWED_ORIGINS`: optional comma-separated extra origins allowed for client-supplied `successUrl`/`returnUrl`. The origins of `POLAR_SUCCESS_URL` and `POLAR_RETURN_URL` are always allowed
+- `CHECKOUT_ALLOWED_ORIGINS`: optional comma-separated extra browser origins allowed for CORS and for client-supplied `successUrl`/`returnUrl`. The origins of `POLAR_SUCCESS_URL` and `POLAR_RETURN_URL` are always allowed
+- `TRUST_PROXY`: Express `trust proxy` setting. Default `loopback` (reverse proxy on the same host). Use a hop count (e.g. `1`) or proxy IPs/CIDRs for other setups; never `true` on a public port, since clients could spoof their IP
+- `SENTRY_DSN`: optional; enables error reporting for 5xx and upstream errors. Request bodies, headers, cookies and query strings are never sent
+- `SENTRY_ENVIRONMENT`: Sentry environment name, defaults to `NODE_ENV`
 - `SMTP_HOST`: SMTP server hostname for license delivery emails
 - `SMTP_PORT`: SMTP server port, usually `587` or `465`
 - `SMTP_SECURE`: set to `true` for implicit TLS, otherwise `false`
@@ -104,42 +106,17 @@ Returns the current service status.
 
 ### Admin Endpoints
 
-#### Create a license
-
-This route is part of the legacy local license flow and is not used when running fully on Polar License Keys.
-
-`POST /v1/admin/licenses`
-
-Headers:
-
-```txt
-x-api-key: <LICENSE_API_KEY>
-```
-
-Request body:
-
-```json
-{
-  "product": "politedb",
-  "planName": "Pro Annual",
-  "customerEmail": "owner@example.com",
-  "instanceName": "Acme Team",
-  "seatsAllowed": 3,
-  "expiresAt": "2027-01-01T00:00:00.000Z"
-}
-```
-
 #### List licenses
 
 `GET /v1/admin/licenses`
 
-Returns locally stored licenses from the legacy flow.
+Returns licenses recorded locally when they were activated, with their active device counts.
 
 #### Revoke a license
 
 `POST /v1/admin/licenses/:licenseId/revoke`
 
-Revokes a locally stored license from the legacy flow.
+Marks a license revoked in the local database and deactivates its stored activations. It does not revoke the key on Polar.
 
 #### List failed license emails
 
@@ -220,7 +197,6 @@ Sends the license email for a Polar benefit grant again, e.g. after Polar stoppe
   "externalCustomerId": "team_123",
   "licenseProduct": "politedb",
   "planName": "Pro Annual",
-  "instanceName": "Acme Team",
   "seatsAllowed": 3
 }
 ```
@@ -235,7 +211,7 @@ It is public, so it only accepts `productIds` listed in `POLAR_PRODUCT_IDS` and 
 
 Polar sends billing events to this endpoint. In the Polar License Keys flow, the backend validates the webhook signature and then:
 
-- acknowledges `order.paid`, `order.refunded`, and `subscription.revoked`
+- marks the local license revoked when a `license_keys` benefit grant is revoked (`benefit_grant.revoked`, which Polar also sends for refunds and revoked subscriptions)
 - sends the issued Polar license key by email when `benefit_grant.created` or `benefit_grant.updated` is received for a `license_keys` benefit (the key may only exist on the update)
 
 License emails are sent at most once per Polar benefit grant. If Polar retries the same webhook, the backend will not resend an already delivered email. If sending fails, the webhook responds `503` so Polar retries it; use the admin resend endpoint once Polar stops retrying.
@@ -260,10 +236,48 @@ VITE_LICENSE_PRODUCT=politedb
 - `src/server.ts`: server entry point
 - `src/app.ts`: Express app configuration and error handling
 - `src/routes`: HTTP route definitions
-- `src/services/license-service.ts`: legacy admin license persistence
-- `src/db/orm.ts`: MikroORM bootstrap
+- `src/services/license-service.ts`: admin license listing and revocation
+- `src/services/polar-license-key.ts`: activation, validation and deactivation against Polar
+- `src/services/polar-service.ts`: checkout, webhooks and license emails
+- `src/db/orm.ts`: MikroORM bootstrap; applies pending migrations on startup
+- `src/migrations`: schema migrations, listed in `src/migrations/index.ts`
 - `src/db/entities.ts`: MikroORM entity schemas
-- `src/utils/licenseKey.ts`: license key and token generation helpers
+
+## Operations
+
+- `GET /api/health` returns `200` with `checks.database: "up"`, or `503` when the database is unreachable.
+- Per-IP rate limits (in memory, per instance): license endpoints 60/min, checkout 10/min, admin 30/min. Exceeding them returns `429 RATE_LIMITED`. Polar webhooks are not rate limited.
+- On Render (`RENDER=true`), rate limiting stays **disabled until `TRUST_PROXY` is set**, because without it every request appears to come from Render's proxy and all users would share one limit. A warning is logged at startup.
+- CORS only allows the configured browser origins (see `CHECKOUT_ALLOWED_ORIGINS`). The desktop app and Polar webhooks are unaffected by CORS.
+- On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, within Render's shutdown grace period), then closes the database pool.
+- Logs include `rid=` from the `x-request-id` header when a proxy sets it.
+
+## Render
+
+Production runs on Render. Recommended service settings:
+
+- Build command: `npm ci --include=dev && npm run build` (TypeScript is a dev dependency)
+- Start command: `node dist/server.js`
+- Health check path: `/api/health` (Render only switches traffic to a new deploy once it passes)
+- Auto-Deploy: **Off**. `.github/workflows/deploy-render.yml` runs the build and the full test suite (including migration tests on Postgres) on every pull request and push to `main`; on `main`, once tests pass, it calls the Render deploy hook with `ref=<commit sha>` so exactly the tested commit is deployed
+- Deploy hook: copy it from the service's Settings tab into the `RENDER_DEPLOY_HOOK_URL` repository secret. It contains a secret key; use "Regenerate Hook" on Render if it leaks
+- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. To measure it, call `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7` header. Increase `TRUST_PROXY` from `1` until `ip` equals your real IP in **both** calls. The fake value must never appear as `ip`.
+
+Render sends `SIGTERM` on deploys and restarts; the server drains in-flight requests before exiting.
+
+## Database Migrations
+
+The schema is managed by MikroORM migrations, applied automatically on startup (each in a transaction). The server no longer calls `updateSchema()`.
+
+- The initial migration is a baseline. On a database created by older versions (which used `updateSchema()`), it only records itself as applied.
+- To change the schema: edit `src/db/entities.ts`, run `npm run db:diff` against a database at the current schema, put the printed SQL into a new `src/migrations/MigrationYYYYMMDDHHMMSS<Name>.ts`, and append it to `src/migrations/index.ts`.
+- `npm run db:diff` against production should print `-- schema matches entities`.
+- Migration tests run against a disposable Postgres when `TEST_POSTGRES_URL` is set (they are skipped otherwise):
+
+```bash
+docker run --rm -p 55432:5432 -e POSTGRES_PASSWORD=test postgres:16
+TEST_POSTGRES_URL=postgresql://postgres:test@localhost:55432/postgres npm test
+```
 
 ## Notes
 

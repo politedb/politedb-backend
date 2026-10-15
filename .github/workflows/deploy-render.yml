@@ -1,0 +1,81 @@
+name: Deploy Render
+
+# Tests every pull request and push to main. On main, a passing build triggers the Render
+# deploy hook for that exact commit. Render's own Auto-Deploy must be off.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      # Disposable database for the migration tests (test/migrations.pg.test.ts).
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_POSTGRES_URL: postgresql://postgres:test@localhost:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Queue deploys instead of cancelling one that is already running.
+    concurrency:
+      group: deploy-render
+      cancel-in-progress: false
+
+    steps:
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set"
+            exit 1
+          fi
+          # Deploy the tested commit, not whatever is newest on main. The hook URL holds a
+          # secret key, so never print it.
+          status="$(curl -sS -o response.json -w '%{http_code}' -X POST \
+            "${RENDER_DEPLOY_HOOK_URL}&ref=${GITHUB_SHA}")"
+          case "$status" in
+            200) echo "Render deploy started: $(cat response.json)" ;;
+            202) echo "Render queued this deploy behind one in progress" ;;
+            *) echo "::error::Render deploy hook returned HTTP $status"; exit 1 ;;
+          esac

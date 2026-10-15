@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { licenseRateLimit } from "../middleware/rate-limit";
 import {
   activatePolarLicenseKey,
   deactivatePolarLicenseKey,
@@ -7,7 +8,7 @@ import {
 
 export const licenseRouter = Router();
 
-licenseRouter.post("/activate", async (req, res, next) => {
+licenseRouter.post("/activate", licenseRateLimit, async (req, res, next) => {
   try {
     res.json(await activatePolarLicenseKey(req.body));
   } catch (error) {
@@ -15,7 +16,7 @@ licenseRouter.post("/activate", async (req, res, next) => {
   }
 });
 
-licenseRouter.post("/validate", async (req, res, next) => {
+licenseRouter.post("/validate", licenseRateLimit, async (req, res, next) => {
   try {
     res.json(await validatePolarLicenseKey(req.body));
   } catch (error) {
@@ -23,7 +24,7 @@ licenseRouter.post("/validate", async (req, res, next) => {
   }
 });
 
-licenseRouter.post("/deactivate", async (req, res, next) => {
+licenseRouter.post("/deactivate", licenseRateLimit, async (req, res, next) => {
   try {
     res.json(await deactivatePolarLicenseKey(req.body));
   } catch (error) {

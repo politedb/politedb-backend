@@ -12,7 +12,7 @@ vi.mock("../src/services/email-service", () => ({
 }));
 
 import { app } from "../src/app";
-import { PolarLicenseDelivery } from "../src/db/entities";
+import { Activation, License, PolarLicenseDelivery } from "../src/db/entities";
 import { getEm } from "../src/db/orm";
 import { processPolarEvent } from "../src/services/polar-service";
 
@@ -140,6 +140,23 @@ describe("license email webhook", () => {
   });
 });
 
+describe("concurrent webhook deliveries", () => {
+  it("send the license email only once", async () => {
+    let release!: () => void;
+    sendLicenseIssuedEmail.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
+
+    const first = processPolarEvent(grantEvent("benefit_grant.created", "lk_1"));
+    // Let the first delivery claim the grant and start sending.
+    await vi.waitFor(() => expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(1));
+    const second = await processPolarEvent(grantEvent("benefit_grant.updated", "lk_1"));
+    release();
+
+    expect(await first).toMatchObject({ licenseEmail: { status: "sent" } });
+    expect(second).toMatchObject({ licenseEmail: { status: "skipped" } });
+    expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("admin API", () => {
   const adminKey = "test-admin-key";
 
@@ -170,6 +187,17 @@ describe("admin API", () => {
     expect(after.body.items).toEqual([]);
   });
 
+  it("can resend an email that was already delivered", async () => {
+    await processPolarEvent(grantEvent("benefit_grant.created", "lk_1"));
+
+    const resent = await request(app)
+      .post("/api/v1/admin/license-emails/grant_1/resend")
+      .set("x-api-key", adminKey);
+
+    expect(resent.body).toEqual({ status: "sent" });
+    expect(sendLicenseIssuedEmail).toHaveBeenCalledTimes(2);
+  });
+
   it("returns 400, not 404, for an unknown grant", async () => {
     const res = await request(app)
       .post("/api/v1/admin/license-emails/nope/resend")
@@ -188,5 +216,69 @@ describe("error handler", () => {
 
     expect(res.status).toBe(500);
     expect(JSON.stringify(res.body)).not.toContain("10.0.0.5");
+  });
+});
+
+describe("benefit_grant.revoked", () => {
+  async function seedActiveLicense() {
+    const em = getEm();
+    const now = new Date();
+    const license = em.create(License, {
+      id: "lic_1",
+      product: "politedb",
+      licenseKey: "POLAR-KEY-1",
+      planName: "Ultimate",
+      customerEmail: "buyer@example.com",
+      instanceName: null,
+      seatsAllowed: 2,
+      expiresAt: null,
+      status: "active",
+      notes: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const [id, deviceId] of [
+      ["act_a", "device-a"],
+      ["act_b", "device-b"],
+    ]) {
+      em.create(Activation, {
+        id: `row_${id}`,
+        license,
+        activationToken: id,
+        deviceId,
+        deviceName: "Mac",
+        platform: "macos",
+        arch: "aarch64",
+        status: "active",
+        activatedAt: now,
+        lastValidatedAt: now,
+        deactivatedAt: null,
+      });
+    }
+    await em.flush();
+  }
+
+  it("marks the license revoked and frees its seats", async () => {
+    await seedActiveLicense();
+
+    const result = await processPolarEvent(grantEvent("benefit_grant.revoked", "lk_1"));
+
+    expect(result).toMatchObject({ result: { licenseFound: true, activationsDeactivated: 2 } });
+    const em = getEm();
+    expect((await em.findOneOrFail(License, { id: "lic_1" })).status).toBe("revoked");
+    expect(await em.count(Activation, { status: "active" })).toBe(0);
+  });
+
+  it("is a no-op for a key never activated here", async () => {
+    const result = await processPolarEvent(grantEvent("benefit_grant.revoked", "lk_1"));
+    expect(result).toMatchObject({ result: { licenseFound: false } });
+  });
+
+  it("ignores non-license benefits", async () => {
+    const event = grantEvent("benefit_grant.revoked", "lk_1") as any;
+    event.data.benefit.type = "discord";
+
+    expect(await processPolarEvent(event)).toMatchObject({ ignored: true });
+    expect(polar.licenseKeys.get).not.toHaveBeenCalled();
   });
 });

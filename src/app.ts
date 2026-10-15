@@ -4,12 +4,14 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { ZodError } from "zod";
 import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
+import { env } from "./config/env";
 import { AppError } from "./errors";
+import { reportError } from "./instrument";
 import indexRouter from "./routes";
 
 export const app = express();
 
-app.set("trust proxy", true);
+app.set("trust proxy", env.trustProxy);
 
 morgan.token("real-ip", (req) => {
   const request = req as express.Request;
@@ -27,11 +29,14 @@ const httpLogFormat = [
   ":status",
   ":response-time ms",
   "ip=:real-ip",
+  "rid=:request-id",
   'ua=":user-agent"',
 ].join(" ");
 
 app.use(helmet());
-app.use(cors());
+// Only the landing page calls this API from a browser; the desktop app and Polar webhooks
+// are not subject to CORS.
+app.use(cors({ origin: env.checkoutAllowedOrigins }));
 app.use("/api/v1/polar/webhooks", express.raw({ type: "*/*" }));
 app.use(express.json());
 app.use(morgan(httpLogFormat));
@@ -75,12 +80,14 @@ app.use(
         return;
       }
       console.error(`Polar API error: status=${error.statusCode}`);
+      reportError(error);
       res.status(502).json({ error: "UPSTREAM_ERROR", message: "License service unavailable." });
       return;
     }
 
     // Full details stay in server logs; clients only get a generic error.
     console.error("Unhandled error", error);
+    reportError(error);
     res.status(500).json({
       error: "INTERNAL_SERVER_ERROR",
     });

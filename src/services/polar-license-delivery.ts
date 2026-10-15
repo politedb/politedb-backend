@@ -22,6 +22,7 @@ export async function upsertPolarLicenseKeyDelivery(input: {
       createdAt: now(),
       updatedAt: now(),
       emailSentAt: null,
+      emailClaimedAt: null,
       emailError: null,
     });
   }
@@ -49,10 +50,33 @@ export async function listPolarLicenseKeyDeliveriesWithErrors() {
   );
 }
 
+// A claim older than this is assumed to belong to a crashed request and can be taken over.
+const EMAIL_CLAIM_TTL_MS = 5 * 60_000;
+
+/**
+ * Atomically claims the right to send this grant's license email. Returns false when
+ * another request holds a fresh claim or (unless `allowSent`) the email was already sent.
+ */
+export async function claimPolarLicenseKeyEmail(grantId: string, options: { allowSent?: boolean } = {}) {
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - EMAIL_CLAIM_TTL_MS);
+  const affected = await getEm().nativeUpdate(
+    PolarLicenseDelivery,
+    {
+      grantId,
+      ...(options.allowSent ? {} : { emailSentAt: null }),
+      $or: [{ emailClaimedAt: null }, { emailClaimedAt: { $lt: staleBefore } }],
+    },
+    { emailClaimedAt: now, updatedAt: now },
+  );
+  return affected === 1;
+}
+
 export async function markPolarLicenseKeyEmailSent(grantId: string) {
   const em = getEm();
   const delivery = await em.findOneOrFail(PolarLicenseDelivery, { grantId });
   delivery.emailSentAt = now();
+  delivery.emailClaimedAt = null;
   delivery.emailError = null;
   delivery.updatedAt = now();
   await em.flush();
@@ -61,7 +85,10 @@ export async function markPolarLicenseKeyEmailSent(grantId: string) {
 export async function markPolarLicenseKeyEmailFailed(grantId: string, error: string) {
   const em = getEm();
   const delivery = await em.findOneOrFail(PolarLicenseDelivery, { grantId });
-  delivery.emailError = error;
+  // Column is varchar(255); SMTP errors can be longer.
+  delivery.emailError = error.slice(0, 255);
+  // Release the claim so Polar's retry can try again right away.
+  delivery.emailClaimedAt = null;
   delivery.updatedAt = now();
   await em.flush();
 }
