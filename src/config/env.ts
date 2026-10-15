@@ -1,4 +1,3 @@
-import path from "node:path";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -38,8 +37,6 @@ const checkoutAllowedOrigins = [
 export const env = {
   port: Number.isFinite(portValue) ? portValue : 4000,
   adminApiKey: (process.env.LICENSE_API_KEY ?? "").trim(),
-  defaultProduct: (process.env.DEFAULT_PRODUCT ?? "politedb").trim(),
-  databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/license-key.db"),
   databaseUrl: (process.env.DATABASE_URL ?? "").trim(),
   polarAccessToken: (process.env.POLAR_ACCESS_TOKEN ?? "").trim(),
   polarOrganizationId: (process.env.POLAR_ORGANIZATION_ID ?? "").trim(),

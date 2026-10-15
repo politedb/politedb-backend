@@ -34,9 +34,7 @@ const checkoutSchema = z.object({
   metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   licenseProduct: z.string().trim().min(1).optional(),
   planName: z.string().trim().min(1).optional(),
-  instanceName: z.string().trim().min(1).optional(),
   seatsAllowed: z.int().positive().optional(),
-  expiresAt: z.iso.datetime().optional(),
 });
 
 function getCheckoutProductIds(requested?: string[]) {
@@ -208,13 +206,12 @@ export async function createPolarCheckout(payload: unknown) {
   assertAllowedRedirect(input.returnUrl);
 
   const polar = getPolarClient();
+  // Informational only (shown on the order in Polar); nothing reads it back.
   const metadata = {
     ...(input.metadata ?? {}),
     ...(input.licenseProduct ? { licenseProduct: input.licenseProduct } : {}),
     ...(input.planName ? { planName: input.planName } : {}),
-    ...(input.instanceName ? { instanceName: input.instanceName } : {}),
     ...(typeof input.seatsAllowed === "number" ? { seatsAllowed: input.seatsAllowed } : {}),
-    ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
   };
   const checkout = await polar.checkouts.create({
     products,
@@ -299,39 +296,6 @@ export async function processPolarEvent(event: PolarWebhookEvent) {
         },
       };
     }
-
-    case "order.paid":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          orderId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
-
-    case "order.refunded":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          orderId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
-
-    case "subscription.revoked":
-      return {
-        received: true,
-        eventType: event.type,
-        result: {
-          subscriptionId: event.data.id,
-          status: "received",
-          source: "polar",
-        },
-      };
 
     default:
       return {

@@ -17,7 +17,7 @@
 - Validate activation tokens
 - Deactivate a device from a license
 - Deliver Polar license keys by email
-- Store legacy admin license records and webhook delivery state in PostgreSQL
+- Store activations, license state and webhook delivery state in PostgreSQL
 
 ## Getting Started
 
@@ -58,7 +58,6 @@ By default, the server runs at `http://localhost:4000`.
 - `PORT`: server port
 - `LICENSE_API_KEY`: API key required for admin endpoints. Required; the server refuses to start if it is empty or `change-me`
 - `DATABASE_URL`: PostgreSQL connection string used by MikroORM
-- `DEFAULT_PRODUCT`: default product name used when creating licenses
 - `POLAR_ACCESS_TOKEN`: Polar organization access token
 - `POLAR_ORGANIZATION_ID`: Polar organization ID used for license key activation and validation
 - `POLAR_WEBHOOK_SECRET`: webhook secret from the Polar dashboard
@@ -104,42 +103,17 @@ Returns the current service status.
 
 ### Admin Endpoints
 
-#### Create a license
-
-This route is part of the legacy local license flow and is not used when running fully on Polar License Keys.
-
-`POST /v1/admin/licenses`
-
-Headers:
-
-```txt
-x-api-key: <LICENSE_API_KEY>
-```
-
-Request body:
-
-```json
-{
-  "product": "politedb",
-  "planName": "Pro Annual",
-  "customerEmail": "owner@example.com",
-  "instanceName": "Acme Team",
-  "seatsAllowed": 3,
-  "expiresAt": "2027-01-01T00:00:00.000Z"
-}
-```
-
 #### List licenses
 
 `GET /v1/admin/licenses`
 
-Returns locally stored licenses from the legacy flow.
+Returns licenses recorded locally when they were activated, with their active device counts.
 
 #### Revoke a license
 
 `POST /v1/admin/licenses/:licenseId/revoke`
 
-Revokes a locally stored license from the legacy flow.
+Marks a license revoked in the local database and deactivates its stored activations. It does not revoke the key on Polar.
 
 #### List failed license emails
 
@@ -220,7 +194,6 @@ Sends the license email for a Polar benefit grant again, e.g. after Polar stoppe
   "externalCustomerId": "team_123",
   "licenseProduct": "politedb",
   "planName": "Pro Annual",
-  "instanceName": "Acme Team",
   "seatsAllowed": 3
 }
 ```
@@ -235,7 +208,7 @@ It is public, so it only accepts `productIds` listed in `POLAR_PRODUCT_IDS` and 
 
 Polar sends billing events to this endpoint. In the Polar License Keys flow, the backend validates the webhook signature and then:
 
-- acknowledges `order.paid`, `order.refunded`, and `subscription.revoked`
+- marks the local license revoked when a `license_keys` benefit grant is revoked (`benefit_grant.revoked`, which Polar also sends for refunds and revoked subscriptions)
 - sends the issued Polar license key by email when `benefit_grant.created` or `benefit_grant.updated` is received for a `license_keys` benefit (the key may only exist on the update)
 
 License emails are sent at most once per Polar benefit grant. If Polar retries the same webhook, the backend will not resend an already delivered email. If sending fails, the webhook responds `503` so Polar retries it; use the admin resend endpoint once Polar stops retrying.
@@ -260,11 +233,12 @@ VITE_LICENSE_PRODUCT=politedb
 - `src/server.ts`: server entry point
 - `src/app.ts`: Express app configuration and error handling
 - `src/routes`: HTTP route definitions
-- `src/services/license-service.ts`: legacy admin license persistence
+- `src/services/license-service.ts`: admin license listing and revocation
+- `src/services/polar-license-key.ts`: activation, validation and deactivation against Polar
+- `src/services/polar-service.ts`: checkout, webhooks and license emails
 - `src/db/orm.ts`: MikroORM bootstrap; applies pending migrations on startup
 - `src/migrations`: schema migrations, listed in `src/migrations/index.ts`
 - `src/db/entities.ts`: MikroORM entity schemas
-- `src/utils/licenseKey.ts`: license key and token generation helpers
 
 ## Database Migrations
 

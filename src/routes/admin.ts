@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { env } from "../config/env";
-import { createLicense, listLicenses, revokeLicense } from "../services/license-service";
+import { listLicenses, revokeLicense } from "../services/license-service";
 import { listFailedLicenseEmails, resendLicenseEmail } from "../services/polar-service";
 
 export const adminRouter = Router();
@@ -22,15 +22,6 @@ adminRouter.use((req, res, next) => {
   }
 
   next();
-});
-
-adminRouter.post("/licenses", async (req, res, next) => {
-  try {
-    const created = await createLicense(req.body);
-    res.status(201).json(created);
-  } catch (error) {
-    next(error);
-  }
 });
 
 adminRouter.get("/licenses", async (_req, res, next) => {

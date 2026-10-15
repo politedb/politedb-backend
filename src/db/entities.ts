@@ -14,7 +14,6 @@ export class License {
   createdAt!: Date;
   updatedAt!: Date;
   activations = new Collection<Activation>(this);
-  polarTransactions = new Collection<PolarTransaction>(this);
 }
 
 export class Activation {
@@ -29,24 +28,6 @@ export class Activation {
   activatedAt!: Date;
   lastValidatedAt!: Date;
   deactivatedAt!: Date | null;
-}
-
-export class PolarTransaction {
-  id!: string;
-  polarOrderId!: string;
-  polarCheckoutId!: string | null;
-  polarSubscriptionId!: string | null;
-  polarCustomerId!: string;
-  polarProductId!: string | null;
-  externalCustomerId!: string | null;
-  license!: License;
-  eventType!: string;
-  status!: string;
-  licenseEmailSentAt!: Date | null;
-  licenseEmailError!: string | null;
-  metadataJson!: string | null;
-  createdAt!: Date;
-  updatedAt!: Date;
 }
 
 export class PolarLicenseDelivery {
@@ -82,11 +63,6 @@ export const LicenseSchema = new EntitySchema<License>({
       entity: () => Activation,
       mappedBy: "license",
     },
-    polarTransactions: {
-      kind: "1:m",
-      entity: () => PolarTransaction,
-      mappedBy: "license",
-    },
   },
 });
 
@@ -115,41 +91,6 @@ export const ActivationSchema = new EntitySchema<Activation>({
   },
 });
 
-export const PolarTransactionSchema = new EntitySchema<PolarTransaction>({
-  class: PolarTransaction,
-  tableName: "polar_transactions",
-  indexes: [
-    { properties: ["polarSubscriptionId"], name: "idx_polar_transactions_subscription" },
-    { properties: ["license"], name: "idx_polar_transactions_license" },
-  ],
-  properties: {
-    id: { type: "string", primary: true },
-    polarOrderId: { type: "string", unique: true, fieldName: "polar_order_id" },
-    polarCheckoutId: { type: "string", nullable: true, fieldName: "polar_checkout_id" },
-    polarSubscriptionId: { type: "string", nullable: true, fieldName: "polar_subscription_id" },
-    polarCustomerId: { type: "string", fieldName: "polar_customer_id" },
-    polarProductId: { type: "string", nullable: true, fieldName: "polar_product_id" },
-    externalCustomerId: { type: "string", nullable: true, fieldName: "external_customer_id" },
-    license: {
-      kind: "m:1",
-      entity: () => License,
-      fieldName: "license_id",
-      deleteRule: "cascade",
-    },
-    eventType: { type: "string", fieldName: "event_type" },
-    status: { type: "string", default: "paid" },
-    licenseEmailSentAt: {
-      type: "datetime",
-      nullable: true,
-      fieldName: "license_email_sent_at",
-    },
-    licenseEmailError: { type: "string", nullable: true, fieldName: "license_email_error" },
-    metadataJson: { type: "text", nullable: true, fieldName: "metadata_json" },
-    createdAt: { type: "datetime", fieldName: "created_at" },
-    updatedAt: { type: "datetime", fieldName: "updated_at" },
-  },
-});
-
 export const PolarLicenseDeliverySchema = new EntitySchema<PolarLicenseDelivery>({
   class: PolarLicenseDelivery,
   tableName: "polar_license_key_deliveries",
@@ -170,6 +111,5 @@ export const PolarLicenseDeliverySchema = new EntitySchema<PolarLicenseDelivery>
 export const entities = [
   LicenseSchema,
   ActivationSchema,
-  PolarTransactionSchema,
   PolarLicenseDeliverySchema,
 ];
