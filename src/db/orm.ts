@@ -25,6 +25,11 @@ export async function initOrm() {
   return orm;
 }
 
+/** Tests only: inject an ORM (e.g. in-memory SQLite) instead of connecting to Postgres. */
+export function setOrmForTesting(instance: unknown) {
+  orm = instance;
+}
+
 export function getOrm() {
   if (!orm) {
     throw new Error("ORM_NOT_INITIALIZED");

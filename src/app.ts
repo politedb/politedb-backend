@@ -3,6 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import { ZodError } from "zod";
+import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
+import { AppError } from "./errors";
 import indexRouter from "./routes";
 
 export const app = express();
@@ -50,14 +52,35 @@ app.use(
       return;
     }
 
-    if (error instanceof Error) {
-      const statusCode = error.message === "UNAUTHORIZED" ? 401 : 400;
-      res.status(statusCode).json({
-        error: error.message,
+    if (error instanceof AppError) {
+      res.status(error.status).json({
+        error: error.code,
+        message: error.message,
       });
       return;
     }
 
+    if (error instanceof PolarError) {
+      // Polar 404 means an unknown key/activation. Report it as 400: the desktop app
+      // treats 404 responses as a missing endpoint.
+      if (error.statusCode === 404) {
+        res.status(400).json({ error: "LICENSE_NOT_FOUND", message: "License key not found." });
+        return;
+      }
+      if (error.statusCode === 403) {
+        res.status(403).json({
+          error: "LICENSE_NOT_PERMITTED",
+          message: "This license key cannot be used for this action.",
+        });
+        return;
+      }
+      console.error(`Polar API error: status=${error.statusCode}`);
+      res.status(502).json({ error: "UPSTREAM_ERROR", message: "License service unavailable." });
+      return;
+    }
+
+    // Full details stay in server logs; clients only get a generic error.
+    console.error("Unhandled error", error);
     res.status(500).json({
       error: "INTERNAL_SERVER_ERROR",
     });

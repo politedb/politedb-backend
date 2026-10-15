@@ -56,16 +56,17 @@ By default, the server runs at `http://localhost:4000`.
 ## Environment Variables
 
 - `PORT`: server port
-- `LICENSE_API_KEY`: API key required for admin endpoints
+- `LICENSE_API_KEY`: API key required for admin endpoints. Required; the server refuses to start if it is empty or `change-me`
 - `DATABASE_URL`: PostgreSQL connection string used by MikroORM
 - `DEFAULT_PRODUCT`: default product name used when creating licenses
 - `POLAR_ACCESS_TOKEN`: Polar organization access token
 - `POLAR_ORGANIZATION_ID`: Polar organization ID used for license key activation and validation
 - `POLAR_WEBHOOK_SECRET`: webhook secret from the Polar dashboard
 - `POLAR_SERVER`: `sandbox` or `production`
-- `POLAR_PRODUCT_IDS`: comma-separated Polar product IDs used by checkout when the request does not provide `productIds`
+- `POLAR_PRODUCT_IDS`: comma-separated Polar product IDs that can be sold through checkout. Used as the default when the request does not provide `productIds`; requested `productIds` must be in this list
 - `POLAR_SUCCESS_URL`: default success URL for Polar checkout
 - `POLAR_RETURN_URL`: optional default return URL for Polar checkout
+- `CHECKOUT_ALLOWED_ORIGINS`: optional comma-separated extra origins allowed for client-supplied `successUrl`/`returnUrl`. The origins of `POLAR_SUCCESS_URL` and `POLAR_RETURN_URL` are always allowed
 - `SMTP_HOST`: SMTP server hostname for license delivery emails
 - `SMTP_PORT`: SMTP server port, usually `587` or `465`
 - `SMTP_SECURE`: set to `true` for implicit TLS, otherwise `false`
@@ -139,6 +140,18 @@ Returns locally stored licenses from the legacy flow.
 `POST /v1/admin/licenses/:licenseId/revoke`
 
 Revokes a locally stored license from the legacy flow.
+
+#### List failed license emails
+
+`GET /v1/admin/license-emails/failed`
+
+Lists Polar license deliveries whose last email attempt failed and that have not been sent since.
+
+#### Resend a license email
+
+`POST /v1/admin/license-emails/:grantId/resend`
+
+Sends the license email for a Polar benefit grant again, e.g. after Polar stopped retrying the webhook.
 
 ### Client Endpoints
 
@@ -214,6 +227,8 @@ Revokes a locally stored license from the legacy flow.
 
 This endpoint creates a Polar checkout session and returns the hosted checkout URL.
 
+It is public, so it only accepts `productIds` listed in `POLAR_PRODUCT_IDS` and `successUrl`/`returnUrl` on an allowed origin (see `CHECKOUT_ALLOWED_ORIGINS`). A client-supplied `customerId` is ignored.
+
 ### Polar webhook endpoint
 
 `POST /polar/webhooks`
@@ -221,9 +236,15 @@ This endpoint creates a Polar checkout session and returns the hosted checkout U
 Polar sends billing events to this endpoint. In the Polar License Keys flow, the backend validates the webhook signature and then:
 
 - acknowledges `order.paid`, `order.refunded`, and `subscription.revoked`
-- sends the issued Polar license key by email when `benefit_grant.created` is received for a `license_keys` benefit
+- sends the issued Polar license key by email when `benefit_grant.created` or `benefit_grant.updated` is received for a `license_keys` benefit (the key may only exist on the update)
 
-License emails are sent at most once per Polar benefit grant. If Polar retries the same webhook, the backend will not resend an already delivered email.
+License emails are sent at most once per Polar benefit grant. If Polar retries the same webhook, the backend will not resend an already delivered email. If sending fails, the webhook responds `503` so Polar retries it; use the admin resend endpoint once Polar stops retrying.
+
+## License behavior notes
+
+- Activating a license on a device that already holds an activation (for example after a reinstall or a lost activation token) releases the old activation for that `device_id` instead of failing.
+- `validate` reports `revoked`, `disabled` or `expired` from the Polar key status, and `inactive` (with a `200` response) when the activation no longer exists on Polar.
+- Business errors never use HTTP `404`, because the desktop app treats `404` as a missing endpoint and tries another URL.
 
 ## Suggested Frontend Configuration
 

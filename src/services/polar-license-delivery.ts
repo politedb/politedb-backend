@@ -40,6 +40,15 @@ export async function getPolarLicenseKeyDelivery(grantId: string) {
   return getEm().findOne(PolarLicenseDelivery, { grantId });
 }
 
+/** Deliveries whose last send attempt failed and that have not been sent since. */
+export async function listPolarLicenseKeyDeliveriesWithErrors() {
+  return getEm().find(
+    PolarLicenseDelivery,
+    { emailSentAt: null, emailError: { $ne: null } },
+    { orderBy: { updatedAt: "DESC" } },
+  );
+}
+
 export async function markPolarLicenseKeyEmailSent(grantId: string) {
   const em = getEm();
   const delivery = await em.findOneOrFail(PolarLicenseDelivery, { grantId });

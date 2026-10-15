@@ -9,9 +9,35 @@ const polarProductIds = (process.env.POLAR_PRODUCT_IDS ?? "")
   .map((value) => value.trim())
   .filter(Boolean);
 
+function originOf(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+const polarSuccessUrl = (process.env.POLAR_SUCCESS_URL ?? "").trim() || null;
+const polarReturnUrl = (process.env.POLAR_RETURN_URL ?? "").trim() || null;
+
+// Origins a client may use for checkout success/return URLs. Defaults to the origins of
+// POLAR_SUCCESS_URL / POLAR_RETURN_URL; CHECKOUT_ALLOWED_ORIGINS adds more (comma-separated).
+const checkoutAllowedOrigins = [
+  ...new Set(
+    [
+      originOf(polarSuccessUrl),
+      originOf(polarReturnUrl),
+      ...(process.env.CHECKOUT_ALLOWED_ORIGINS ?? "").split(",").map((value) => originOf(value.trim())),
+    ].filter((value): value is string => Boolean(value)),
+  ),
+];
+
 export const env = {
   port: Number.isFinite(portValue) ? portValue : 4000,
-  adminApiKey: (process.env.LICENSE_API_KEY ?? "change-me").trim(),
+  adminApiKey: (process.env.LICENSE_API_KEY ?? "").trim(),
   defaultProduct: (process.env.DEFAULT_PRODUCT ?? "politedb").trim(),
   databasePath: path.resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/license-key.db"),
   databaseUrl: (process.env.DATABASE_URL ?? "").trim(),
@@ -19,9 +45,10 @@ export const env = {
   polarOrganizationId: (process.env.POLAR_ORGANIZATION_ID ?? "").trim(),
   polarWebhookSecret: (process.env.POLAR_WEBHOOK_SECRET ?? "").trim(),
   polarServer: (polarMode === "production" ? "production" : "sandbox") as "production" | "sandbox",
-  polarSuccessUrl: (process.env.POLAR_SUCCESS_URL ?? "").trim() || null,
-  polarReturnUrl: (process.env.POLAR_RETURN_URL ?? "").trim() || null,
+  polarSuccessUrl,
+  polarReturnUrl,
   polarProductIds,
+  checkoutAllowedOrigins,
   smtpHost: (process.env.SMTP_HOST ?? "").trim() || null,
   smtpPort: Number(process.env.SMTP_PORT ?? 587),
   smtpSecure: (process.env.SMTP_SECURE ?? "false").trim() === "true",
@@ -30,6 +57,7 @@ export const env = {
   smtpFrom: (process.env.SMTP_FROM ?? "").trim() || null,
 };
 
-if (!env.adminApiKey) {
-  throw new Error("LICENSE_API_KEY is required");
+// The admin API can list and revoke licenses; never run it with a missing or placeholder key.
+if (!env.adminApiKey || env.adminApiKey === "change-me") {
+  throw new Error("LICENSE_API_KEY must be set to a non-default value");
 }

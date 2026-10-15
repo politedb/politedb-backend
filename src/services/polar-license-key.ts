@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
+import type { ValidatedLicenseKey } from "@polar-sh/sdk/models/components/validatedlicensekey.js";
 import { env } from "../config/env";
 import { Activation, License } from "../db/entities";
 import { getEm } from "../db/orm";
+import { badRequest, forbidden } from "../errors";
 import { getPolarClient } from "../libs/polar";
 import { createId } from "../utils/license-key";
 
@@ -37,11 +40,21 @@ const deactivateSchema = z
     path: ["activationToken"],
   });
 
+type PolarClient = ReturnType<typeof getPolarClient>;
 type DeviceInput = z.infer<typeof deviceSchema>;
 type ActivateInput = z.infer<typeof activateSchema>;
-type ActivationResult = Awaited<
-  ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["activate"]>
->;
+type ActivationResult = Awaited<ReturnType<PolarClient["licenseKeys"]["activate"]>>;
+
+/** Status reported to the app. Anything other than "active" is treated as not licensed. */
+type LicenseStatus = "active" | "inactive" | "revoked" | "disabled" | "expired";
+
+const STATUS_MESSAGES: Record<LicenseStatus, string> = {
+  active: "License valid",
+  inactive: "This device is no longer activated for this license.",
+  revoked: "This license has been revoked.",
+  disabled: "This license has been disabled.",
+  expired: "This license has expired.",
+};
 
 function getOrganizationId() {
   if (!env.polarOrganizationId) {
@@ -51,11 +64,11 @@ function getOrganizationId() {
   return env.polarOrganizationId;
 }
 
-function buildActivationLabel(device: z.infer<typeof deviceSchema>) {
+function buildActivationLabel(device: DeviceInput) {
   return `${device.device_name} (${device.platform}/${device.arch})`;
 }
 
-function buildActivationMeta(device: z.infer<typeof deviceSchema>) {
+function buildActivationMeta(device: DeviceInput) {
   return {
     device_id: device.device_id,
     device_name: device.device_name,
@@ -64,7 +77,7 @@ function buildActivationMeta(device: z.infer<typeof deviceSchema>) {
   };
 }
 
-function buildActivationConditions(device: z.infer<typeof deviceSchema>) {
+function buildActivationConditions(device: DeviceInput) {
   return {
     device_id: device.device_id,
     platform: device.platform,
@@ -72,11 +85,36 @@ function buildActivationConditions(device: z.infer<typeof deviceSchema>) {
   };
 }
 
+function isPolarNotFound(error: unknown) {
+  return error instanceof PolarError && error.statusCode === 404;
+}
+
+/** Key-level status from Polar, ignoring whether this device holds an activation. */
+function keyStatus(key: Pick<ValidatedLicenseKey, "status" | "expiresAt">): LicenseStatus {
+  if (key.status === "revoked") {
+    return "revoked";
+  }
+  if (key.status !== "granted") {
+    return "disabled";
+  }
+  if (key.expiresAt && key.expiresAt.getTime() <= Date.now()) {
+    return "expired";
+  }
+  return "active";
+}
+
+function assertLicenseUsable(key: Pick<ValidatedLicenseKey, "status" | "expiresAt">) {
+  const status = keyStatus(key);
+  if (status !== "active") {
+    throw forbidden(`LICENSE_${status.toUpperCase()}`, STATUS_MESSAGES[status]);
+  }
+}
+
 function mapActivationResponse(
   product: string,
   licenseKey: string,
   planName: string,
-  activation: Awaited<ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["activate"]>>,
+  activation: ActivationResult,
   devicesUsed: number,
 ) {
   return {
@@ -102,11 +140,14 @@ function mapValidatedResponse(
   product: string,
   licenseKey: string,
   planName: string,
-  validated: Awaited<ReturnType<ReturnType<typeof getPolarClient>["licenseKeys"]["validate"]>>,
+  validated: ValidatedLicenseKey,
   devicesUsed: number | null,
 ) {
+  const fromKey = keyStatus(validated);
+  const status: LicenseStatus = fromKey !== "active" ? fromKey : validated.activation ? "active" : "inactive";
+
   return {
-    status: validated.activation ? "active" : "inactive",
+    status,
     licenseId: validated.id,
     licenseKey,
     activationToken: validated.activation?.id ?? null,
@@ -119,7 +160,7 @@ function mapValidatedResponse(
     seatsAllowed: validated.limitActivations,
     devicesUsed,
     product,
-    message: "License valid",
+    message: STATUS_MESSAGES[status],
     source: "polar",
   };
 }
@@ -140,14 +181,60 @@ async function resolveLicenseKeyForDeactivation(activationToken?: string, licens
   }
 
   if (!activationToken) {
-    throw new Error("ACTIVATION_NOT_FOUND");
+    throw badRequest("ACTIVATION_NOT_FOUND");
   }
 
   if (!licenseKey) {
-    throw new Error("LICENSE_KEY_REQUIRED");
+    throw badRequest("LICENSE_KEY_REQUIRED");
   }
 
   return licenseKey;
+}
+
+/**
+ * Releases any activation this device already holds, on Polar and in our DB, so the
+ * device can activate again after losing its activation token (reinstall, data reset,
+ * or a second distribution flavor on the same Mac). The same device never holds more
+ * than one seat.
+ */
+async function releaseDeviceActivations(input: ActivateInput, licenseKeyId: string, polar: PolarClient) {
+  const key = await polar.licenseKeys.get({ id: licenseKeyId });
+  const sameDevice = key.activations.filter(
+    (activation) => activation.meta?.device_id === input.device.device_id,
+  );
+
+  for (const activation of sameDevice) {
+    try {
+      await polar.licenseKeys.deactivate({
+        key: input.licenseKey,
+        organizationId: getOrganizationId(),
+        activationId: activation.id,
+      });
+    } catch (error) {
+      if (!isPolarNotFound(error)) {
+        throw error;
+      }
+    }
+    await markActivationDeactivatedByToken(activation.id);
+  }
+
+  // Also clear DB rows that drifted from Polar (e.g. activation removed in the Polar dashboard).
+  const em = getEm();
+  const license = await em.findOne(License, { licenseKey: input.licenseKey });
+  if (license) {
+    const stale = await em.find(Activation, {
+      license: license.id,
+      deviceId: input.device.device_id,
+      status: "active",
+    });
+    const now = new Date();
+    for (const activation of stale) {
+      activation.status = "inactive";
+      activation.deactivatedAt = now;
+      activation.lastValidatedAt = now;
+    }
+    await em.flush();
+  }
 }
 
 /**
@@ -155,42 +242,24 @@ async function resolveLicenseKeyForDeactivation(activationToken?: string, licens
  * `limitActivations` (via validate). Seat *usage* is always counted from the DB, not Polar’s
  * `usage` field.
  */
-async function assertActivationCapacity(
-  input: ActivateInput,
-  polar: ReturnType<typeof getPolarClient>,
-) {
+async function assertActivationCapacity(input: ActivateInput, limitActivations: number | null) {
   const em = getEm();
   const license = await em.findOne(License, { licenseKey: input.licenseKey });
-
-  if (license) {
-    const sameDeviceActive = await em.findOne(Activation, {
-      license: license.id,
-      deviceId: input.device.device_id,
-      status: "active",
-    });
-    if (sameDeviceActive) {
-      throw new Error("DEVICE_ALREADY_ACTIVATED");
-    }
-  }
-
   const activeInDb = license
     ? await em.count(Activation, { license: license.id, status: "active" })
     : 0;
 
-  const validated = await polar.licenseKeys.validate({
-    key: input.licenseKey,
-    organizationId: getOrganizationId(),
-    conditions: buildActivationConditions(input.device),
-  });
-
-  const seatsLimit = validated.limitActivations ?? 0;
+  const seatsLimit = limitActivations ?? 0;
 
   if (seatsLimit > 0 && activeInDb >= seatsLimit) {
-    throw new Error("LICENSE_ACTIVATION_LIMIT_REACHED");
+    throw forbidden(
+      "LICENSE_ACTIVATION_LIMIT_REACHED",
+      "This license is already active on the maximum number of devices.",
+    );
   }
 }
 
-async function activateOnPolar(input: ActivateInput, polar: ReturnType<typeof getPolarClient>) {
+async function activateOnPolar(input: ActivateInput, polar: PolarClient) {
   return polar.licenseKeys.activate({
     key: input.licenseKey,
     organizationId: getOrganizationId(),
@@ -303,11 +372,30 @@ async function markActivationDeactivatedByToken(activationToken: string) {
   await em.flush();
 }
 
+async function touchActivationValidated(activationToken: string) {
+  const em = getEm();
+  const stored = await em.findOne(Activation, { activationToken, status: "active" });
+  if (!stored) {
+    return;
+  }
+
+  stored.lastValidatedAt = new Date();
+  await em.flush();
+}
+
 export async function activatePolarLicenseKey(payload: unknown) {
   const input = activateSchema.parse(payload);
   const polar = getPolarClient();
 
-  await assertActivationCapacity(input, polar);
+  const validated = await polar.licenseKeys.validate({
+    key: input.licenseKey,
+    organizationId: getOrganizationId(),
+    conditions: buildActivationConditions(input.device),
+  });
+  assertLicenseUsable(validated);
+
+  await releaseDeviceActivations(input, validated.id, polar);
+  await assertActivationCapacity(input, validated.limitActivations);
   const activation = await activateOnPolar(input, polar);
   const benefit = await polar.benefits.get({ id: activation.licenseKey.benefitId });
 
@@ -332,23 +420,46 @@ export async function validatePolarLicenseKey(payload: unknown) {
   const input = validateSchema.parse(payload);
   const polar = getPolarClient();
 
-  const validated = await polar.licenseKeys.validate({
-    key: input.licenseKey,
-    organizationId: getOrganizationId(),
-    activationId: input.activationToken,
-    conditions: buildActivationConditions(input.device),
-  });
+  let validated: ValidatedLicenseKey;
+  try {
+    validated = await polar.licenseKeys.validate({
+      key: input.licenseKey,
+      organizationId: getOrganizationId(),
+      activationId: input.activationToken,
+      conditions: buildActivationConditions(input.device),
+    });
+  } catch (error) {
+    if (!isPolarNotFound(error)) {
+      throw error;
+    }
+    // The key or this activation no longer exists on Polar (deactivated elsewhere,
+    // released by a re-activation of this device, or deleted). Tell the app it is no
+    // longer licensed instead of failing the refresh.
+    await markActivationDeactivatedByToken(input.activationToken);
+    return {
+      status: "inactive" as const,
+      licenseKey: input.licenseKey,
+      activationToken: null,
+      product: input.product,
+      message: STATUS_MESSAGES.inactive,
+      source: "polar",
+    };
+  }
 
   const license = await getEm().findOne(License, { licenseKey: input.licenseKey });
-  const devicesUsed = await countActiveDevicesForLicenseKey(input.licenseKey);
-
-  return mapValidatedResponse(
+  const response = mapValidatedResponse(
     input.product,
     input.licenseKey,
     license?.planName ?? "Polar License",
     validated,
-    devicesUsed,
+    await countActiveDevicesForLicenseKey(input.licenseKey),
   );
+
+  if (response.status === "active") {
+    await touchActivationValidated(input.activationToken);
+  }
+
+  return response;
 }
 
 export async function deactivatePolarLicenseKey(payload: unknown) {
@@ -359,7 +470,7 @@ export async function deactivatePolarLicenseKey(payload: unknown) {
   );
 
   if (!input.activationToken) {
-    throw new Error("ACTIVATION_NOT_FOUND");
+    throw badRequest("ACTIVATION_NOT_FOUND");
   }
 
   const polar = getPolarClient();
