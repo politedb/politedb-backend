@@ -1,5 +1,6 @@
 import { Migration20261015000000Initial } from "./Migration20261015000000Initial";
 import { Migration20261015010000DropPolarTransactions } from "./Migration20261015010000DropPolarTransactions";
+import { Migration20261015020000AddEmailClaim } from "./Migration20261015020000AddEmailClaim";
 
 /**
  * Applied in order at startup. Listed explicitly (no filesystem glob) so the same list
@@ -15,4 +16,5 @@ export const migrationsList = [
     name: "Migration20261015010000DropPolarTransactions",
     class: Migration20261015010000DropPolarTransactions,
   },
+  { name: "Migration20261015020000AddEmailClaim", class: Migration20261015020000AddEmailClaim },
 ];

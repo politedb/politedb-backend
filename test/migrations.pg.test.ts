@@ -60,6 +60,7 @@ describe.skipIf(!adminUrl)("migrations (Postgres)", () => {
     expect((await orm.getMigrator().getExecutedMigrations()).map((m) => m.name)).toEqual([
       INITIAL,
       DROP_TRANSACTIONS,
+      "Migration20261015020000AddEmailClaim",
     ]);
     expect((await orm.schema.getUpdateSchemaSQL({ wrap: false })).trim()).toBe("");
     expect(await tableExists(orm, "polar_transactions")).toBe(false);

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { checkoutRateLimit } from "../middleware/rate-limit";
 import {
   createPolarCheckout,
   handlePolarWebhook,
@@ -7,7 +8,7 @@ import {
 
 export const polarRouter = Router();
 
-polarRouter.post("/checkout", async (req, res, next) => {
+polarRouter.post("/checkout", checkoutRateLimit, async (req, res, next) => {
   try {
     const checkout = await createPolarCheckout(req.body);
     res.status(201).json(checkout);

@@ -65,7 +65,10 @@ By default, the server runs at `http://localhost:4000`.
 - `POLAR_PRODUCT_IDS`: comma-separated Polar product IDs that can be sold through checkout. Used as the default when the request does not provide `productIds`; requested `productIds` must be in this list
 - `POLAR_SUCCESS_URL`: default success URL for Polar checkout
 - `POLAR_RETURN_URL`: optional default return URL for Polar checkout
-- `CHECKOUT_ALLOWED_ORIGINS`: optional comma-separated extra origins allowed for client-supplied `successUrl`/`returnUrl`. The origins of `POLAR_SUCCESS_URL` and `POLAR_RETURN_URL` are always allowed
+- `CHECKOUT_ALLOWED_ORIGINS`: optional comma-separated extra browser origins allowed for CORS and for client-supplied `successUrl`/`returnUrl`. The origins of `POLAR_SUCCESS_URL` and `POLAR_RETURN_URL` are always allowed
+- `TRUST_PROXY`: Express `trust proxy` setting. Default `loopback` (reverse proxy on the same host). Use a hop count (e.g. `1`) or proxy IPs/CIDRs for other setups; never `true` on a public port, since clients could spoof their IP
+- `SENTRY_DSN`: optional; enables error reporting for 5xx and upstream errors. Request bodies, headers, cookies and query strings are never sent
+- `SENTRY_ENVIRONMENT`: Sentry environment name, defaults to `NODE_ENV`
 - `SMTP_HOST`: SMTP server hostname for license delivery emails
 - `SMTP_PORT`: SMTP server port, usually `587` or `465`
 - `SMTP_SECURE`: set to `true` for implicit TLS, otherwise `false`
@@ -239,6 +242,28 @@ VITE_LICENSE_PRODUCT=politedb
 - `src/db/orm.ts`: MikroORM bootstrap; applies pending migrations on startup
 - `src/migrations`: schema migrations, listed in `src/migrations/index.ts`
 - `src/db/entities.ts`: MikroORM entity schemas
+
+## Operations
+
+- `GET /api/health` returns `200` with `checks.database: "up"`, or `503` when the database is unreachable.
+- Per-IP rate limits (in memory, per instance): license endpoints 60/min, checkout 10/min, admin 30/min. Exceeding them returns `429 RATE_LIMITED`. Polar webhooks are not rate limited.
+- On Render (`RENDER=true`), rate limiting stays **disabled until `TRUST_PROXY` is set**, because without it every request appears to come from Render's proxy and all users would share one limit. A warning is logged at startup.
+- CORS only allows the configured browser origins (see `CHECKOUT_ALLOWED_ORIGINS`). The desktop app and Polar webhooks are unaffected by CORS.
+- On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, within Render's shutdown grace period), then closes the database pool.
+- Logs include `rid=` from the `x-request-id` header when a proxy sets it.
+
+## Render
+
+Production runs on Render. Recommended service settings:
+
+- Build command: `npm ci --include=dev && npm run build` (TypeScript is a dev dependency)
+- Start command: `node dist/server.js`
+- Health check path: `/api/health` (Render only switches traffic to a new deploy once it passes)
+- Auto-Deploy: **Off**. `.github/workflows/deploy-render.yml` runs the build and the full test suite (including migration tests on Postgres) on every pull request and push to `main`; on `main`, once tests pass, it calls the Render deploy hook with `ref=<commit sha>` so exactly the tested commit is deployed
+- Deploy hook: copy it from the service's Settings tab into the `RENDER_DEPLOY_HOOK_URL` repository secret. It contains a secret key; use "Regenerate Hook" on Render if it leaks
+- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. To measure it, call `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7` header. Increase `TRUST_PROXY` from `1` until `ip` equals your real IP in **both** calls. The fake value must never appear as `ip`.
+
+Render sends `SIGTERM` on deploys and restarts; the server drains in-flight requests before exiting.
 
 ## Database Migrations
 

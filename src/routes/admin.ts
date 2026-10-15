@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { Router } from "express";
 import { env } from "../config/env";
+import { adminRateLimit } from "../middleware/rate-limit";
 import { listLicenses, revokeLicense } from "../services/license-service";
 import { listFailedLicenseEmails, resendLicenseEmail } from "../services/polar-service";
 
@@ -14,6 +15,8 @@ function isValidAdminKey(provided: string | undefined) {
   const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
   return crypto.timingSafeEqual(digest(provided), digest(env.adminApiKey));
 }
+
+adminRouter.use(adminRateLimit);
 
 adminRouter.use((req, res, next) => {
   if (!isValidAdminKey(req.header("x-api-key"))) {
@@ -38,6 +41,17 @@ adminRouter.post("/licenses/:licenseId/revoke", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+// Shows how the app sees the caller's IP. Call it from a known IP (optionally with a fake
+// X-Forwarded-For) to choose TRUST_PROXY: `ip` must equal your real public IP.
+adminRouter.get("/debug/client-ip", (req, res) => {
+  res.json({
+    ip: req.ip,
+    ips: req.ips,
+    forwardedFor: req.get("x-forwarded-for") ?? null,
+    trustProxy: env.trustProxy,
+  });
 });
 
 adminRouter.get("/license-emails/failed", async (_req, res, next) => {

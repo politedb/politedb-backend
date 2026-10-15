@@ -7,6 +7,7 @@ import { getPolarClient } from "../libs/polar";
 import { normalizeHeaders } from "../utils/common";
 import { canSendLicenseEmails, sendLicenseIssuedEmail } from "./email-service";
 import {
+  claimPolarLicenseKeyEmail,
   getPolarLicenseKeyDelivery,
   listPolarLicenseKeyDeliveriesWithErrors,
   markPolarLicenseKeyEmailFailed,
@@ -78,6 +79,8 @@ function planNameFromBenefitDescription(description: string) {
 
 type LicenseEmailContext = {
   grantId: string;
+  /** Admin resend: send even if the email already went out. */
+  resend?: boolean;
   licenseKeyId: string;
   customerEmail: string;
   customerName?: string | null;
@@ -93,6 +96,10 @@ type LicenseEmailResult =
  * so the webhook responds non-2xx and Polar retries the delivery.
  */
 async function sendLicenseEmailForGrant(context: LicenseEmailContext): Promise<LicenseEmailResult> {
+  if (!(await claimPolarLicenseKeyEmail(context.grantId, { allowSent: context.resend }))) {
+    return { status: "skipped", reason: "ALREADY_SENT_OR_IN_PROGRESS" };
+  }
+
   const polar = getPolarClient();
 
   try {
@@ -194,6 +201,7 @@ export async function resendLicenseEmail(grantId: string) {
 
   return sendLicenseEmailForGrant({
     grantId,
+    resend: true,
     licenseKeyId: delivery.polarLicenseKeyId,
     customerEmail: delivery.customerEmail,
   });
