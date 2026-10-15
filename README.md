@@ -251,6 +251,15 @@ VITE_LICENSE_PRODUCT=politedb
 - On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, matching PM2 `kill_timeout`), then closes the database pool.
 - Logs include `rid=` from the `x-request-id` header when a proxy sets it.
 
+## Deployment
+
+Pushing to `main` runs `.github/workflows/deploy-vps.yml`: test → build → package → upload → `scripts/remote-deploy.sh` on the VPS.
+
+- The new release is extracted to `$APP_DIR/.deploy/incoming`. The running release is moved to `$APP_DIR/.deploy/previous` (not deleted), the new one is moved into place, and PM2 reloads.
+- The script then polls `http://127.0.0.1:$PORT/api/health` (60 s by default). If the check fails, it restores the previous code and `.env`, reloads PM2 and fails the workflow. Rollback does not undo database migrations, so migrations must stay compatible with the previous release.
+- Deploys are serialized (`concurrency: deploy-vps`).
+- Set the `VPS_KNOWN_HOSTS` secret to the output of `ssh-keyscan -p <port> <host>` to pin the server's host key. Without it, the workflow warns and trusts the key on first use.
+
 ## Database Migrations
 
 The schema is managed by MikroORM migrations, applied automatically on startup (each in a transaction). The server no longer calls `updateSchema()`.
