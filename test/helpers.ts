@@ -1,4 +1,4 @@
-import { MikroORM } from "@mikro-orm/sqlite";
+import { MikroORM } from "@mikro-orm/better-sqlite";
 import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
 import { vi } from "vitest";
 import { entities } from "../src/db/entities";
