@@ -221,6 +221,7 @@ License emails are sent at most once per Polar benefit grant. If Polar retries t
 - Activating a license on a device that already holds an activation (for example after a reinstall or a lost activation token) releases the old activation for that `device_id` instead of failing.
 - `validate` reports `revoked`, `disabled` or `expired` from the Polar key status, and `inactive` (with a `200` response) when the activation no longer exists on Polar.
 - Business errors never use HTTP `404`, because the desktop app treats `404` as a missing endpoint and tries another URL.
+- Polar errors are mapped: unknown key/activation → `400 LICENSE_NOT_FOUND`, malformed key or token → `400 INVALID_LICENSE_REQUEST`, forbidden → `403 LICENSE_NOT_PERMITTED`, and Polar outages, timeouts or our own Polar credential/quota problems → `503 UPSTREAM_ERROR`. `502` is never used, because Cloudflare replaces 502 response bodies.
 
 ## Suggested Frontend Configuration
 
