@@ -22,15 +22,14 @@ type BenefitGrantLicenseKeysProperties = {
   licenseKeyId?: string;
 };
 
-// Unknown keys (e.g. `customerId`) are stripped: a public caller must not attach a
-// checkout to an existing Polar customer.
+// Unknown keys (e.g. `customerId`, `externalCustomerId`) are stripped: a public caller must
+// not attach a checkout to an existing Polar customer.
 const checkoutSchema = z.object({
   productIds: z.array(z.string().min(1)).min(1).optional(),
   successUrl: z.url().optional(),
   returnUrl: z.url().optional(),
   customerEmail: z.email().optional(),
   customerName: z.string().trim().min(1).optional(),
-  externalCustomerId: z.string().trim().min(1).optional(),
   seats: z.int().positive().optional(),
   metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   licenseProduct: z.string().trim().min(1).optional(),
@@ -227,7 +226,6 @@ export async function createPolarCheckout(payload: unknown) {
     returnUrl: input.returnUrl ?? env.polarReturnUrl ?? undefined,
     customerEmail: input.customerEmail,
     customerName: input.customerName,
-    externalCustomerId: input.externalCustomerId,
     seats: input.seats,
     metadata,
   });
