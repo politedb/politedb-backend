@@ -99,6 +99,11 @@ jobs:
     needs: image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # RENDER_DEPLOY_HOOK_URL is a secret of the "production" GitHub Environment; a job only
+    # sees environment secrets when it declares the environment.
+    environment:
+      name: production
+      url: https://api.politedb.com
     # Queue deploys instead of cancelling one that is already running.
     concurrency:
       group: deploy-render
