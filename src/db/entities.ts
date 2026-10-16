@@ -79,6 +79,8 @@ export const ActivationSchema = new EntitySchema<Activation>({
       entity: () => License,
       fieldName: "license_id",
       deleteRule: "cascade",
+      // Matches the existing FK ("on update cascade"); MikroORM 7 no longer adds it by default.
+      updateRule: "cascade",
     },
     activationToken: { type: "string", unique: true, fieldName: "activation_token" },
     deviceId: { type: "string", fieldName: "device_id" },

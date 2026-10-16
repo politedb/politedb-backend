@@ -1,4 +1,4 @@
-import { MikroORM } from "@mikro-orm/better-sqlite";
+import { MikroORM } from "@mikro-orm/sqlite";
 import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
 import { vi } from "vitest";
 import { entities } from "../src/db/entities";
@@ -7,7 +7,7 @@ import { setOrmForTesting } from "../src/db/orm";
 /** Fresh in-memory database per test, using the production entity schemas. */
 export async function setupTestOrm() {
   const orm = await MikroORM.init({ entities, dbName: ":memory:", allowGlobalContext: true });
-  await orm.schema.createSchema();
+  await orm.schema.create();
   setOrmForTesting(orm);
   return orm;
 }

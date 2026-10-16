@@ -7,7 +7,7 @@
 - Express 5
 - TypeScript
 - PostgreSQL 16
-- MikroORM
+- MikroORM 7 (ESM-only; this CommonJS app loads it via `require(esm)`, so Node ≥ 22.17 is required and `tsconfig` uses `module: Node20`)
 - Zod
 
 ## Features

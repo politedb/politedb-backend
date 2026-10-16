@@ -45,7 +45,7 @@ async function tableExists(orm: MikroORM, table: string) {
 async function legacyDatabase(name: string) {
   const url = await freshDatabase(name);
   const orm = await MikroORM.init(ormConfig(url));
-  await orm.getMigrator().up({ to: INITIAL });
+  await orm.migrator.up({ to: INITIAL });
   await orm.em.getConnection().execute(`drop table mikro_orm_migrations`);
   await orm.close(true);
   return url;
@@ -55,9 +55,9 @@ describe.skipIf(!adminUrl)("migrations (Postgres)", () => {
   it("creates the full schema on an empty database", async () => {
     const orm = await open(await freshDatabase("politedb_mig_fresh"));
 
-    await orm.getMigrator().up();
+    await orm.migrator.up();
 
-    expect((await orm.getMigrator().getExecutedMigrations()).map((m) => m.name)).toEqual([
+    expect((await orm.migrator.getExecuted()).map((m) => m.name)).toEqual([
       INITIAL,
       DROP_TRANSACTIONS,
       "Migration20261015020000AddEmailClaim",
@@ -76,9 +76,9 @@ describe.skipIf(!adminUrl)("migrations (Postgres)", () => {
     await seed.close(true);
 
     const orm = await open(url);
-    await orm.getMigrator().up();
+    await orm.migrator.up();
 
-    expect(await orm.getMigrator().getPendingMigrations()).toEqual([]);
+    expect(await orm.migrator.getPending()).toEqual([]);
     expect((await orm.schema.getUpdateSchemaSQL({ wrap: false })).trim()).toBe("");
     const [{ count }] = await orm.em.getConnection().execute(`select count(*)::int as count from licenses`);
     expect(count).toBe(1);
@@ -93,7 +93,7 @@ describe.skipIf(!adminUrl)("migrations (Postgres)", () => {
        values ('tx_1', 'order_1', 'cus_1', 'lic_1', 'order.paid', 'paid', now(), now());`,
     );
 
-    await expect(orm.getMigrator().up()).rejects.toThrow(/polar_transactions has 1 row/);
+    await expect(orm.migrator.up()).rejects.toThrow(/polar_transactions has 1 row/);
     expect(await tableExists(orm, "polar_transactions")).toBe(true);
   });
 });

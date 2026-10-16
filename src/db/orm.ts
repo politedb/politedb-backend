@@ -4,7 +4,7 @@ import { env } from "../config/env";
 import { migrationsList } from "../migrations";
 import { entities } from "./entities";
 
-let orm: any = null;
+let orm: MikroORM | null = null;
 
 function getClientUrl() {
   if (!env.databaseUrl) {
@@ -36,7 +36,7 @@ export async function initOrm() {
 
     // Explicit migrations instead of `updateSchema()`, which could alter or drop columns
     // on every boot based on entity definitions.
-    await orm.getMigrator().up();
+    await orm.migrator.up();
   }
 
   return orm;
@@ -44,7 +44,7 @@ export async function initOrm() {
 
 /** Tests only: inject an ORM (e.g. in-memory SQLite) instead of connecting to Postgres. */
 export function setOrmForTesting(instance: unknown) {
-  orm = instance;
+  orm = instance as MikroORM;
 }
 
 export function getOrm() {

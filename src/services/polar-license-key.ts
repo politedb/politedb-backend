@@ -274,7 +274,8 @@ async function upsertLicenseFromActivation(input: {
       product: input.product,
       licenseKey: input.licenseKey,
       planName: input.planName,
-      customerEmail: input.activation.licenseKey.customer.email,
+      // Polar customers may have no email; the column is NOT NULL.
+      customerEmail: input.activation.licenseKey.customer.email ?? "",
       instanceName: null,
       seatsAllowed: seatsFromPolar,
       expiresAt: input.activation.licenseKey.expiresAt,
@@ -287,7 +288,7 @@ async function upsertLicenseFromActivation(input: {
   } else {
     license.product = input.product;
     license.planName = input.planName;
-    license.customerEmail = input.activation.licenseKey.customer.email;
+    license.customerEmail = input.activation.licenseKey.customer.email ?? license.customerEmail;
     license.seatsAllowed = seatsFromPolar;
     license.expiresAt = input.activation.licenseKey.expiresAt;
     // Polar just accepted the activation, so a previously revoked key was re-granted.
