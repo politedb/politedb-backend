@@ -50,6 +50,7 @@
   "overrides": {
     "@rushstack/node-core-library": {
       "ajv": "^8.18.0"
-    }
+    },
+    "better-sqlite3": "^12.4.1"
   }
 }
