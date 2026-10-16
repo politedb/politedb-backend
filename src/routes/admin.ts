@@ -7,13 +7,15 @@ import { listFailedLicenseEmails, resendLicenseEmail } from "../services/polar-s
 
 export const adminRouter = Router();
 
-// Hash both sides so the comparison is constant-time regardless of input length.
+// Constant-time comparison. Only the key length can leak, which does not help guessing a
+// random key.
 function isValidAdminKey(provided: string | undefined) {
   if (!provided) {
     return false;
   }
-  const digest = (value: string) => crypto.createHash("sha256").update(value).digest();
-  return crypto.timingSafeEqual(digest(provided), digest(env.adminApiKey));
+  const actual = Buffer.from(provided);
+  const expected = Buffer.from(env.adminApiKey);
+  return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
 }
 
 adminRouter.use(adminRateLimit);

@@ -65,9 +65,37 @@ export function canSendLicenseEmails() {
   return isEmailConfigured();
 }
 
-export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
-  const client = getTransporter();
-  const greetingName = input.customerName?.trim() || input.instanceName?.trim() || "there";
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+function escapeHtml(value: string | number) {
+  return String(value).replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
+}
+
+/**
+ * The buyer chooses their own name at checkout and can enter someone else's email, so the
+ * name must not turn our license email into a phishing message. Use it only when it looks
+ * like a plain name: no links, no email addresses, no control characters, bounded length.
+ */
+export function safeDisplayName(name?: string | null) {
+  const cleaned = (name ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned || cleaned.length > 60) {
+    return null;
+  }
+  if (/[<>@]|:\/\/|www\.|\.(com|net|org|io|app|link|xyz|ru|cn)\b/i.test(cleaned)) {
+    return null;
+  }
+  return cleaned;
+}
+
+/** Builds the license email. Pure, so the escaping is testable. */
+export function renderLicenseIssuedEmail(input: Omit<LicenseEmailInput, "to">) {
+  const greetingName = safeDisplayName(input.customerName) ?? safeDisplayName(input.instanceName) ?? "there";
   const expiryLabel = formatExpiry(input.expiresAt);
   const subject = `Welcome to ${input.product} - ${input.planName} plan`;
   const text = [
@@ -108,13 +136,13 @@ export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
   ].join("\n");
 
   const html = [
-    `<p>Hi ${greetingName},</p>`,
+    `<p>Hi ${escapeHtml(greetingName)},</p>`,
     "<p>Your purchase was successful. Here's your license key:</p>",
     "<div>",
-    `<p><strong>🔐 License key:</strong> <code>${input.licenseKey}</code></p>`,
-    `<p><strong>📦 Plan:</strong> ${input.planName}</p>`,
-    `<p><strong>👥 Seats:</strong> ${input.seatsAllowed}</p>`,
-    `<p><strong>🗓️ Expires at:</strong> ${expiryLabel}</p>`,
+    `<p><strong>🔐 License key:</strong> <code>${escapeHtml(input.licenseKey)}</code></p>`,
+    `<p><strong>📦 Plan:</strong> ${escapeHtml(input.planName)}</p>`,
+    `<p><strong>👥 Seats:</strong> ${escapeHtml(input.seatsAllowed)}</p>`,
+    `<p><strong>🗓️ Expires at:</strong> ${escapeHtml(expiryLabel)}</p>`,
     "</div>",
     "<p>Keep this key somewhere safe. You can use it to activate your product.</p>",
     "<hr>",
@@ -134,8 +162,15 @@ export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
     "</div>",
     "<hr>",
     "<p>Need help? Our team is here for you anytime.</p>",
-    `<p>Best,<br>The ${input.product} Team</p>`,
+    `<p>Best,<br>The ${escapeHtml(input.product)} Team</p>`,
   ].join("");
+
+  return { subject, text, html };
+}
+
+export async function sendLicenseIssuedEmail(input: LicenseEmailInput) {
+  const client = getTransporter();
+  const { subject, text, html } = renderLicenseIssuedEmail(input);
 
   await client.sendMail({
     from: env.smtpFrom!,

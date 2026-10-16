@@ -76,12 +76,14 @@ describe("POST /api/v1/polar/checkout", () => {
     expect(res.body.error).toBe("REDIRECT_NOT_ALLOWED");
   });
 
-  it("never forwards a client-supplied customerId", async () => {
+  it("never forwards a client-supplied customerId or externalCustomerId", async () => {
     await request(app)
       .post("/api/v1/polar/checkout")
-      .send({ ...landingBody, customerId: "cus_someone_else" });
+      .send({ ...landingBody, customerId: "cus_someone_else", externalCustomerId: "user_42" });
 
-    expect(polar.checkouts.create.mock.calls[0][0]).not.toHaveProperty("customerId");
+    const sent = polar.checkouts.create.mock.calls[0][0];
+    expect(sent).not.toHaveProperty("customerId");
+    expect(sent.externalCustomerId).toBeUndefined();
   });
 });
 
@@ -163,6 +165,10 @@ describe("admin API", () => {
   it("rejects a missing or wrong key", async () => {
     expect((await request(app).get("/api/v1/admin/licenses")).status).toBe(401);
     expect((await request(app).get("/api/v1/admin/licenses").set("x-api-key", "wrong")).status).toBe(401);
+    // Same length as the real key but different.
+    expect((await request(app).get("/api/v1/admin/licenses").set("x-api-key", "test-admin-kex")).status).toBe(401);
+    // Real key as a prefix.
+    expect((await request(app).get("/api/v1/admin/licenses").set("x-api-key", "test-admin-key-extra")).status).toBe(401);
   });
 
   it("accepts the configured key", async () => {

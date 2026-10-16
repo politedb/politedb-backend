@@ -194,7 +194,6 @@ Sends the license email for a Polar benefit grant again, e.g. after Polar stoppe
   "productIds": ["<polar-product-id>"],
   "customerEmail": "owner@example.com",
   "customerName": "Acme Team",
-  "externalCustomerId": "team_123",
   "licenseProduct": "politedb",
   "planName": "Pro Annual",
   "seatsAllowed": 3
@@ -203,7 +202,7 @@ Sends the license email for a Polar benefit grant again, e.g. after Polar stoppe
 
 This endpoint creates a Polar checkout session and returns the hosted checkout URL.
 
-It is public, so it only accepts `productIds` listed in `POLAR_PRODUCT_IDS` and `successUrl`/`returnUrl` on an allowed origin (see `CHECKOUT_ALLOWED_ORIGINS`). A client-supplied `customerId` is ignored.
+It is public, so it only accepts `productIds` listed in `POLAR_PRODUCT_IDS` and `successUrl`/`returnUrl` on an allowed origin (see `CHECKOUT_ALLOWED_ORIGINS`). Client-supplied `customerId` and `externalCustomerId` are ignored.
 
 ### Polar webhook endpoint
 
