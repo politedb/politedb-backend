@@ -5,7 +5,9 @@ FROM node:24-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+# No production dependency has install scripts; skipping them avoids compiling the
+# test-only SQLite driver (better-sqlite3) in the image build.
+RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src ./src
