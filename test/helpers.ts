@@ -12,9 +12,13 @@ export async function setupTestOrm() {
   return orm;
 }
 
+export function polarError(status: number) {
+  const response = new Response("{}", { status });
+  return new PolarError(`Polar ${status}`, { response, request: new Request("https://polar.test"), body: "{}" });
+}
+
 export function polarNotFound() {
-  const response = new Response("{}", { status: 404 });
-  return new PolarError("Not found", { response, request: new Request("https://polar.test"), body: "{}" });
+  return polarError(404);
 }
 
 export const device = {

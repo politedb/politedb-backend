@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import { ZodError } from "zod";
+import { HTTPClientError } from "@polar-sh/sdk/models/errors/httpclienterrors.js";
 import { PolarError } from "@polar-sh/sdk/models/errors/polarerror.js";
 import { env } from "./config/env";
 import { AppError } from "./errors";
@@ -10,6 +11,34 @@ import { reportError } from "./instrument";
 import indexRouter from "./routes";
 
 export const app = express();
+
+const UPSTREAM_UNAVAILABLE = {
+  error: "UPSTREAM_ERROR",
+  message: "License service unavailable. Please try again later.",
+};
+
+/**
+ * Maps a Polar API status to our response. Client errors become 4xx (never 404: the
+ * desktop app treats 404 as a missing endpoint). Polar outages and our own credential or
+ * quota problems become 503; 502 is avoided because Cloudflare replaces 502 bodies.
+ */
+export function mapPolarError(statusCode: number): { status: number; body: { error: string; message: string } } {
+  if (statusCode === 404) {
+    return { status: 400, body: { error: "LICENSE_NOT_FOUND", message: "License key not found." } };
+  }
+  if (statusCode === 403) {
+    return {
+      status: 403,
+      body: { error: "LICENSE_NOT_PERMITTED", message: "This license key cannot be used for this action." },
+    };
+  }
+  // 401: our Polar token is invalid; 429: our Polar quota. Neither is the caller's fault.
+  if (statusCode === 401 || statusCode === 429 || statusCode >= 500) {
+    return { status: 503, body: UPSTREAM_UNAVAILABLE };
+  }
+  // 400/409/422 and other client errors: the license key or activation token is malformed.
+  return { status: 400, body: { error: "INVALID_LICENSE_REQUEST", message: "The license request is invalid." } };
+}
 
 app.set("trust proxy", env.trustProxy);
 
@@ -66,22 +95,20 @@ app.use(
     }
 
     if (error instanceof PolarError) {
-      // Polar 404 means an unknown key/activation. Report it as 400: the desktop app
-      // treats 404 responses as a missing endpoint.
-      if (error.statusCode === 404) {
-        res.status(400).json({ error: "LICENSE_NOT_FOUND", message: "License key not found." });
-        return;
+      const mapped = mapPolarError(error.statusCode);
+      if (mapped.status >= 500) {
+        console.error(`Polar API error: status=${error.statusCode}`);
+        reportError(error);
       }
-      if (error.statusCode === 403) {
-        res.status(403).json({
-          error: "LICENSE_NOT_PERMITTED",
-          message: "This license key cannot be used for this action.",
-        });
-        return;
-      }
-      console.error(`Polar API error: status=${error.statusCode}`);
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+
+    if (error instanceof HTTPClientError) {
+      // Network failure or timeout talking to Polar.
+      console.error(`Polar request failed: ${error.name}`);
       reportError(error);
-      res.status(502).json({ error: "UPSTREAM_ERROR", message: "License service unavailable." });
+      res.status(503).json(UPSTREAM_UNAVAILABLE);
       return;
     }
 
