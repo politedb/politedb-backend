@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "../config/env";
 
 type LicenseEmailInput = {
@@ -12,7 +12,7 @@ type LicenseEmailInput = {
   expiresAt?: string | null;
 };
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 function isEmailConfigured() {
   return Boolean(env.smtpHost && env.smtpFrom);
