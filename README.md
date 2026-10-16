@@ -252,18 +252,32 @@ VITE_LICENSE_PRODUCT=politedb
 - On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, within Render's shutdown grace period), then closes the database pool.
 - Logs include `rid=` from the `x-request-id` header when a proxy sets it.
 
-## Render
+## Docker and Render
 
-Production runs on Render. Recommended service settings:
+Production runs on Render as an **image-backed** service using the Docker image from GitHub Container Registry (`ghcr.io/politedb/politedb-backend`).
 
-- Build command: `npm ci --include=dev && npm run build` (TypeScript is a dev dependency)
-- Start command: `node dist/server.js`
-- Health check path: `/api/health` (Render only switches traffic to a new deploy once it passes)
-- Auto-Deploy: **Off**. `.github/workflows/deploy-render.yml` runs the build and the full test suite (including migration tests on Postgres) on every pull request and push to `main`; on `main`, once tests pass, it calls the Render deploy hook with `ref=<commit sha>` so exactly the tested commit is deployed
-- Deploy hook: copy it from the service's Settings tab into the `RENDER_DEPLOY_HOOK_URL` repository secret. It contains a secret key; use "Regenerate Hook" on Render if it leaks
-- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. To measure it, call `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7` header. Increase `TRUST_PROXY` from `1` until `ip` equals your real IP in **both** calls. The fake value must never appear as `ip`.
+`.github/workflows/deploy-render.yml`:
 
-Render sends `SIGTERM` on deploys and restarts; the server drains in-flight requests before exiting.
+1. `test`: build plus the full test suite, including migration tests on a Postgres service. Runs on every pull request and push to `main`.
+2. `image`: builds the `Dockerfile`. On `main` it pushes `ghcr.io/politedb/politedb-backend:sha-<commit>` and `:latest`. Pull requests build without pushing.
+3. `deploy` (`main` only): calls the Render deploy hook with `imgURL=ghcr.io/politedb/politedb-backend@sha256:<digest>`, so Render runs exactly the tested image.
+
+Image details:
+- `node:24-slim`, production dependencies only, runs as the non-root `node` user, `CMD node dist/server.js` (no PM2).
+- No `.env` is baked in (see `.dockerignore`); all configuration comes from Render environment variables.
+- Has a `HEALTHCHECK` on `/api/health`. Migrations run on startup. `SIGTERM` drains in-flight requests.
+
+Render setup:
+- Create the service from **Existing Image** `ghcr.io/politedb/politedb-backend:latest`. The package is private, so add a registry credential (a GitHub token with `read:packages`) under Render's Registry Credentials.
+- Health check path: `/api/health`. Auto-Deploy: **Off**, since deploys come from the workflow.
+- Copy the service's deploy hook into the `RENDER_DEPLOY_HOOK_URL` repository secret. It contains a secret key; use "Regenerate Hook" if it leaks.
+- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. Measure it with `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7`. Increase from `1` until `ip` equals your real IP in **both** calls. Rate limiting stays off on Render until this is set.
+
+Run the production image locally against the compose Postgres:
+
+```bash
+LICENSE_API_KEY=dev-only-key docker compose --profile app up --build
+```
 
 ## Database Migrations
 

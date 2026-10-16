@@ -25,5 +25,23 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # Production image, for checking the container locally:
+  #   LICENSE_API_KEY=dev-only-key docker compose --profile app up --build
+  app:
+    profiles: ["app"]
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://politedb:politedb@postgres:5432/politedb
+      LICENSE_API_KEY: ${LICENSE_API_KEY:?set LICENSE_API_KEY}
+      POLAR_SUCCESS_URL: http://localhost:3000/billing/success
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: PoliteDB <licenses@localhost>
+    ports:
+      - "4000:4000"
+
 volumes:
   postgres_data:
