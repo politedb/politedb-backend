@@ -13,7 +13,7 @@ async function bootstrap() {
 
   if (!rateLimitEnabled) {
     console.warn(
-      "Rate limiting is disabled: running on Render without TRUST_PROXY. Set TRUST_PROXY to the measured proxy hop count.",
+      "Rate limiting is disabled: on Render, TRUST_PROXY must be the measured proxy hop count (see GET /api/v1/admin/debug/client-ip).",
     );
   }
 

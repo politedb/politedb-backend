@@ -68,6 +68,21 @@ export const env = {
   checkoutAllowedOrigins,
   trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
   trustProxyConfigured: Boolean((process.env.TRUST_PROXY ?? "").trim()),
+  /**
+   * Whether TRUST_PROXY can see past a platform proxy on another host: a hop count or
+   * explicit proxy addresses. "loopback"/"linklocal"/"uniquelocal" only trust proxies on
+   * this machine or private ranges, and true trusts a client-spoofable header.
+   */
+  trustProxyReachesClient: (() => {
+    const value = parseTrustProxy(process.env.TRUST_PROXY);
+    if (typeof value === "number") {
+      return value > 0;
+    }
+    if (typeof value === "string") {
+      return !["loopback", "linklocal", "uniquelocal"].includes(value);
+    }
+    return false;
+  })(),
   // Render sets RENDER=true. Its proxies sit in front of the app, so the client IP is only
   // correct once TRUST_PROXY is set to the measured hop count.
   runningOnRender: process.env.RENDER === "true",
