@@ -248,7 +248,7 @@ VITE_LICENSE_PRODUCT=politedb
 
 - `GET /api/health` returns `200` with `checks.database: "up"`, or `503` when the database is unreachable.
 - Per-IP rate limits (in memory, per instance): license endpoints 60/min, checkout 10/min, admin 30/min. Exceeding them returns `429 RATE_LIMITED`. Polar webhooks are not rate limited.
-- On Render (`RENDER=true`), rate limiting stays **disabled until `TRUST_PROXY` is set**, because without it every request appears to come from Render's proxy and all users would share one limit. A warning is logged at startup.
+- On Render (`RENDER=true`), rate limiting stays **disabled until `TRUST_PROXY` is a hop count or proxy addresses**, because without it every request appears to come from Render's proxy and all users would share one limit. A warning is logged at startup.
 - CORS only allows the configured browser origins (see `CHECKOUT_ALLOWED_ORIGINS`). The desktop app and Polar webhooks are unaffected by CORS.
 - On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight requests finish (up to 10 s, within Render's shutdown grace period), then closes the database pool.
 - Logs include `rid=` from the `x-request-id` header when a proxy sets it.
@@ -272,7 +272,7 @@ Render setup:
 - Create the service from **Existing Image** `ghcr.io/politedb/politedb-backend:latest`. The package is private, so add a registry credential (a GitHub token with `read:packages`) under Render's Registry Credentials.
 - Health check path: `/api/health`. Auto-Deploy: **Off**, since deploys come from the workflow.
 - Copy the service's deploy hook into the `RENDER_DEPLOY_HOOK_URL` repository secret. It contains a secret key; use "Regenerate Hook" if it leaks.
-- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. Measure it with `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7`. Increase from `1` until `ip` equals your real IP in **both** calls. Rate limiting stays off on Render until this is set.
+- `TRUST_PROXY`: Render's proxies append to `X-Forwarded-For`, and the hop count is not documented. Measure it with `GET /api/v1/admin/debug/client-ip` (admin key) from a known public IP, once plain and once with a fake `X-Forwarded-For: 203.0.113.7`. Increase from `1` until `ip` equals your real IP in **both** calls. Rate limiting stays off on Render until this is a hop count (or explicit proxy addresses). `loopback`, the local default, does not count, because Render's proxies are on other hosts.
 
 Run the production image locally against the compose Postgres:
 

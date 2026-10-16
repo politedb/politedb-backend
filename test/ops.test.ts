@@ -89,17 +89,28 @@ describe("client IP diagnostics", () => {
   });
 });
 
-describe("rate limiting on Render without TRUST_PROXY", () => {
-  it("is disabled instead of throttling all users as one IP", async () => {
+describe("rate limiting on Render", () => {
+  async function enabledWith(trustProxy: string) {
     vi.resetModules();
     vi.stubEnv("RENDER", "true");
-    vi.stubEnv("TRUST_PROXY", "");
+    vi.stubEnv("TRUST_PROXY", trustProxy);
     try {
-      const { rateLimitEnabled } = await import("../src/middleware/rate-limit");
-      expect(rateLimitEnabled).toBe(false);
+      return (await import("../src/middleware/rate-limit")).rateLimitEnabled;
     } finally {
       vi.unstubAllEnvs();
       vi.resetModules();
     }
+  }
+
+  // Each of these makes req.ip a proxy address (or spoofable), throttling all users as one.
+  it.each(["", "loopback", "linklocal", "uniquelocal", "true", "false", "0"])(
+    "stays off with TRUST_PROXY=%j",
+    async (value) => {
+      expect(await enabledWith(value)).toBe(false);
+    },
+  );
+
+  it.each(["1", "3", "10.0.0.0/8"])("turns on with TRUST_PROXY=%j", async (value) => {
+    expect(await enabledWith(value)).toBe(true);
   });
 });

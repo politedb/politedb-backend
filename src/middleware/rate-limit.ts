@@ -3,11 +3,13 @@ import { rateLimit } from "express-rate-limit";
 import { env } from "../config/env";
 
 /**
- * Behind Render's proxies without TRUST_PROXY, every request appears to come from the
- * proxy, so per-IP limits would throttle all users together. Disable limiting until the
- * hop count is configured (see GET /v1/admin/debug/client-ip).
+ * On Render, requests arrive through Cloudflare and Render's proxies on other hosts. Unless
+ * TRUST_PROXY is a hop count (or explicit proxy addresses), req.ip is a proxy address and
+ * per-IP limits would throttle all users together. Keep limiting off until it is measured
+ * (see GET /v1/admin/debug/client-ip). "loopback" does not count: it only trusts proxies
+ * on the same machine.
  */
-export const rateLimitEnabled = !(env.runningOnRender && !env.trustProxyConfigured);
+export const rateLimitEnabled = !(env.runningOnRender && !env.trustProxyReachesClient);
 
 const passThrough: RequestHandler = (_req, _res, next) => next();
 
